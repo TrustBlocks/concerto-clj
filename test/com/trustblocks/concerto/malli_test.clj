@@ -9,7 +9,20 @@
             [malli.core :as m]
             [malli.error :as me]))
 
-(defn- schema-keys [form] (mapv first (drop 1 form)))
+;; A compiled form is either a bare map (nothing nested to reference) or
+;; [:schema {:registry {fqn map-schema ...}} root]. These reach the map for one
+;; declaration either way.
+
+(defn- map-for [form fqn]
+  (if (= :schema (first form))
+    (get (:registry (second form)) fqn)
+    form))
+
+(defn- entries     [map-form] (filterv vector? (drop 1 map-form)))
+(defn- schema-keys [map-form] (mapv first (entries map-form)))
+(defn- by-key      [map-form] (into {} (map (juxt first last)) (entries map-form)))
+
+(defn- root-of [form] (if (= :schema (first form)) (nth form 2) form))
 
 (deftest validates-real-samples
   (doseq [[t fqn] [["acceptance-of-delivery" fx/acceptance-fqn]
@@ -22,22 +35,80 @@
 
 (deftest rejects-what-concerto-rejects
   (let [schema   (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
-        instance (inst/json->edn (fx/sample "promissory-note"))]
+        instance (inst/json->edn (fx/sample "promissory-note"))
+        why      #(me/humanize (m/explain schema %))]
 
     (testing "a string where an integer is declared"
-      (is (not (m/validate schema (assoc instance :defaultDays "sixty"))))
       (is (= {:defaultDays ["should be an integer"]}
-             (me/humanize (m/explain schema (assoc instance :defaultDays "sixty"))))))
+             (why (assoc instance :defaultDays "sixty")))))
 
     (testing "Double reports one clear reason, not one per :or branch"
       (is (= {:interestRate ["should be a number"]}
-             (me/humanize (m/explain schema (assoc instance :interestRate "high"))))))
+             (why (assoc instance :interestRate "high")))))
 
     (testing "a missing required property"
       (is (not (m/validate schema (dissoc instance :maker)))))
 
     (testing "the wrong $class"
       (is (not (m/validate schema (assoc instance :$class fx/acceptance-fqn)))))))
+
+(deftest nested-concepts-are-checked
+  (testing "`amount` is a MonetaryAmount, not merely a map.
+
+           Each of these is rejected by `concerto validate`, and each was
+           accepted while nested concepts compiled to a bare :map."
+    (let [schema   (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
+          instance (inst/json->edn (fx/sample "promissory-note"))
+          money    "org.accordproject.money@0.3.0.MonetaryAmount"
+          why      #(me/humanize (m/explain schema (assoc instance :amount %)))]
+
+      (testing "wrong type inside the nested concept"
+        (is (= {:amount {:doubleValue ["should be a number"]}}
+               (why {:$class money :doubleValue "lots" :currencyCode "USD"}))))
+
+      (testing "missing a required property of the nested concept"
+        (is (= {:amount {:doubleValue ["missing required key"]}}
+               (why {:$class money :currencyCode "USD"}))))
+
+      (testing "an undeclared property on the nested concept"
+        (is (= {:amount {:totalNonsense ["disallowed key"]}}
+               (why {:$class money :doubleValue 1 :currencyCode "USD"
+                     :totalNonsense true}))))
+
+      (testing "a value outside the nested enum"
+        (is (contains? (:amount (why {:$class money :doubleValue 1 :currencyCode "ZZZ"}))
+                       :currencyCode)))
+
+      (testing "the nested $class naming a different type"
+        (is (not (m/validate schema (assoc instance :amount
+                                           {:$class fx/note-fqn}))))))))
+
+(deftest maps-are-closed
+  (let [schema   (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
+        instance (inst/json->edn (fx/sample "promissory-note"))]
+
+    (testing "Concerto rejects undeclared properties, so this does too"
+      (is (= {:notADeclaredField ["disallowed key"]}
+             (me/humanize (m/explain schema (assoc instance :notADeclaredField "surprise"))))))
+
+    (testing "closed can be turned off for callers who need it"
+      (let [open (cm/->schema (fx/registry "promissory-note") fx/note-fqn :closed false)]
+        (is (m/validate open (assoc instance :notADeclaredField "surprise")))))))
+
+(deftest system-properties-follow-concerto
+  (testing "$identifier is accepted anywhere -- rental-deposit-with carries one
+           on a plain unidentified concept and concerto validate calls it valid"
+    (let [form  (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
+          money (by-key (map-for form "org.accordproject.money@0.3.0.MonetaryAmount"))]
+      (is (contains? money :$identifier))
+
+      (testing "but $timestamp is not, on a declaration that cannot carry one"
+        (is (not (contains? money :$timestamp))))))
+
+  (testing "transactions and events do carry $timestamp"
+    (let [fqn  "org.accordproject.acceptanceofdelivery@0.1.0.InspectionResponse"
+          form (cm/->edn (fx/registry "acceptance-of-delivery") fqn)]
+      (is (contains? (by-key (map-for form fqn)) :$timestamp)))))
 
 (deftest double-accepts-json-whole-numbers
   (testing "JSON has no int/double distinction, and Concerto's own validator
@@ -56,7 +127,8 @@
     (is (= [:$class :$identifier :clauseId :amount :date :maker :interestRate
             :individual :makerAddress :lender :legalEntity :lenderAddress
             :principal :maturityDate :defaultDays :insolvencyDays :jurisdiction]
-           (schema-keys (cm/->edn (fx/registry "promissory-note") fx/note-fqn)))))
+           (schema-keys (map-for (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
+                                 fx/note-fqn)))))
 
   (testing "and it is stable across calls"
     (let [reg (fx/registry "promissory-note")]
@@ -76,11 +148,32 @@
 
       (testing (str t " recompiles and still validates, given registry*")
         (let [revived (m/schema (edn/read-string (pr-str form)) {:registry cm/registry*})]
-          (is (m/validate revived (inst/json->edn (fx/sample t)))))))))
+          (is (m/validate revived (inst/json->edn (fx/sample t))))
+
+          (testing "and still rejects, so the export is not a weaker schema"
+            (is (not (m/validate revived (assoc (inst/json->edn (fx/sample t))
+                                                :notADeclaredField 1))))))))))
+
+(deftest simple-models-stay-simple
+  (testing "nothing nested to reference, so no registry wrapper is emitted"
+    (let [form (cm/->edn (fx/registry "acceptance-of-delivery") fx/acceptance-fqn)]
+      (is (= :map (first form)))
+      (is (= {:closed true} (second form))))))
+
+(deftest nested-models-emit-refs
+  (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
+    (is (= :schema (first form)))
+    (is (= [:ref fx/note-fqn] (root-of form)))
+    (testing "the referenced declaration travels with the schema"
+      (is (contains? (:registry (second form))
+                     "org.accordproject.money@0.3.0.MonetaryAmount")))
+    (testing "and the property points at it rather than at a bare :map"
+      (is (= [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]
+             (:amount (by-key (map-for form fx/note-fqn))))))))
 
 (deftest non-trivial-types-are-named
-  (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
-        by-k (into {} (map (juxt first last)) (drop 1 form))]
+  (let [by-k (by-key (map-for (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
+                              fx/note-fqn))]
     (is (= :concerto/date-time (:date by-k)))
     (is (= :concerto/double    (:interestRate by-k)))
     (is (= :string             (:maker by-k)))
@@ -88,9 +181,8 @@
     (is (= :boolean            (:individual by-k)))))
 
 (deftest enums-compile-to-enum
-  (let [form (cm/->edn (fx/registry "acceptance-of-delivery")
-                       "org.accordproject.acceptanceofdelivery@0.1.0.InspectionResponse")
-        by-k (into {} (map (juxt first last)) (drop 1 form))]
+  (let [fqn  "org.accordproject.acceptanceofdelivery@0.1.0.InspectionResponse"
+        by-k (by-key (map-for (cm/->edn (fx/registry "acceptance-of-delivery") fqn) fqn))]
     (is (= [:enum "PASSED_TESTING" "FAILED_TESTING" "OUTSIDE_INSPECTION_PERIOD"]
            (:status by-k)))))
 
@@ -98,11 +190,7 @@
   (testing "$class is what makes the flattening lossless, so it is an equality
             check, never inferred structurally"
     (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
-      (is (= [:$class [:= fx/note-fqn]] (second form))))))
-
-(deftest identifier-is-optional
-  (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
-    (is (= [:$identifier {:optional true} :string] (nth form 2)))))
+      (is (= [:$class [:= fx/note-fqn]] (first (entries (map-for form fx/note-fqn))))))))
 
 (deftest key-fn-is-the-adapter-seam
   (testing "a storage adapter supplies its own key transform, including for the
@@ -110,17 +198,98 @@
     (let [xtdb-ish (fn [nm] (case nm
                               "$class"      :concerto/class
                               "$identifier" :concerto/identifier
-                              (keyword (str/replace nm #"([a-z])([A-Z])" "$1-$2"))))
+                              "$timestamp"  :concerto/timestamp
+                              (keyword (str/lower-case
+                                        (str/replace nm #"([a-z])([A-Z])" "$1-$2")))))
           form     (cm/->edn (fx/registry "promissory-note") fx/note-fqn :key-fn xtdb-ish)
-          ks       (set (schema-keys form))]
+          ks       (set (schema-keys (map-for form fx/note-fqn)))]
       (is (contains? ks :concerto/class))
       (is (contains? ks :concerto/identifier))
-      (is (contains? ks (keyword "interest-Rate")))
-      (is (not (contains? ks :$class))))))
+      (is (contains? ks :interest-rate))
+      (is (not (contains? ks :$class)))
+
+      (testing "and it reaches nested declarations too"
+        (let [money (set (schema-keys
+                          (map-for form "org.accordproject.money@0.3.0.MonetaryAmount")))]
+          (is (contains? money :double-value))
+          (is (contains? money :concerto/class)))))))
 
 (deftest unknown-class-is-an-error-not-a-nil
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown \$class"
                         (cm/->schema (fx/registry "promissory-note") "no.such@1.0.0.Thing"))))
+
+;; ------------------------------------------------------------- polymorphism
+
+(defn- decl [kind nm & {:keys [abstract super props]}]
+  (cond-> {:$class     (str "concerto.metamodel@1.0.0." kind)
+           :name       nm
+           :properties (vec props)}
+    abstract (assoc :isAbstract true)
+    super    (assoc :superType {:$class "concerto.metamodel@1.0.0.TypeIdentifier"
+                                :name   super})))
+
+(defn- prop [kind nm & {:keys [type optional array]}]
+  (cond-> {:$class (str "concerto.metamodel@1.0.0." kind) :name nm}
+    type     (assoc :type {:$class "concerto.metamodel@1.0.0.TypeIdentifier" :name type})
+    optional (assoc :isOptional true)
+    array    (assoc :isArray true)))
+
+(def ^:private poly
+  (mm/registry
+   [{:$class       "concerto.metamodel@1.0.0.Model"
+     :namespace    "poly@1.0.0"
+     :imports      []
+     :declarations
+     [(decl "ConceptDeclaration" "Animal" :abstract true
+            :props [(prop "StringProperty" "name")])
+      (decl "ConceptDeclaration" "Dog" :super "Animal"
+            :props [(prop "BooleanProperty" "goodBoy")])
+      (decl "ConceptDeclaration" "Cat" :super "Animal"
+            :props [(prop "IntegerProperty" "lives")])
+      (decl "ConceptDeclaration" "Shelter"
+            :props [(prop "ObjectProperty" "resident" :type "Animal")])
+      (decl "ConceptDeclaration" "Node"
+            :props [(prop "ObjectProperty" "child" :type "Node" :optional true)])]}]))
+
+(deftest abstract-types-dispatch-on-class
+  (testing "Concerto permits polymorphism, so a property typed as an abstract
+           parent must accept any concrete subclass. Validating against the
+           parent's own closed schema would reject the subclass's properties --
+           the false rejection that closing the maps would otherwise introduce."
+    (let [form (cm/->edn poly "poly@1.0.0.Shelter")
+          res  (:resident (by-key (map-for form "poly@1.0.0.Shelter")))]
+      (is (= [:multi {:dispatch :$class}
+              ["poly@1.0.0.Cat" [:ref "poly@1.0.0.Cat"]]
+              ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
+             res))))
+
+  (let [schema (cm/->schema poly "poly@1.0.0.Shelter")
+        shelter #(hash-map :$class "poly@1.0.0.Shelter" :resident %)]
+
+    (testing "either concrete subclass is accepted"
+      (is (m/validate schema (shelter {:$class "poly@1.0.0.Dog" :name "Rex" :goodBoy true})))
+      (is (m/validate schema (shelter {:$class "poly@1.0.0.Cat" :name "Tom" :lives 9}))))
+
+    (testing "the inherited property is still required"
+      (is (not (m/validate schema (shelter {:$class "poly@1.0.0.Dog" :goodBoy true})))))
+
+    (testing "a subclass's own property is still type-checked"
+      (is (not (m/validate schema (shelter {:$class "poly@1.0.0.Dog" :name "Rex" :goodBoy "yes"})))))
+
+    (testing "one subclass's properties are not accepted on another"
+      (is (not (m/validate schema (shelter {:$class "poly@1.0.0.Cat" :name "Tom" :goodBoy true})))))
+
+    (testing "and the abstract type itself cannot be instantiated"
+      (is (not (m/validate schema (shelter {:$class "poly@1.0.0.Animal" :name "???"})))))))
+
+(deftest self-referential-concepts-terminate
+  (testing "a concept referring to itself compiles rather than inlining forever,
+           which is why references go through a local registry"
+    (let [schema (cm/->schema poly "poly@1.0.0.Node")
+          node   "poly@1.0.0.Node"]
+      (is (m/validate schema {:$class node}))
+      (is (m/validate schema {:$class node :child {:$class node :child {:$class node}}}))
+      (is (not (m/validate schema {:$class node :child {:$class node :nope 1}}))))))
 
 ;; ------------------------------------------------------------------ versions
 
@@ -142,4 +311,18 @@
                                             :name   "spooky"}]}}}]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Cannot compile property \"spooky\""
+                            (cm/->schema reg "x@1.0.0.T"))))))
+
+(deftest unresolved-types-are-refused
+  (testing "a property pointing at a type whose model is not loaded cannot be
+           validated against anything, so it is named rather than waved through"
+    (let [reg {"x@1.0.0.T"
+               {:declaration {:$class     "concerto.metamodel@1.0.0.ConceptDeclaration"
+                              :name       "T"
+                              :properties [{:$class "concerto.metamodel@1.0.0.ObjectProperty"
+                                            :name   "thing"
+                                            :type   {:$class "concerto.metamodel@1.0.0.TypeIdentifier"
+                                                     :name   "Missing"}}]}}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Unresolved type"
                             (cm/->schema reg "x@1.0.0.T"))))))

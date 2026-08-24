@@ -64,6 +64,7 @@ are both legal EDN keywords that read back identically, so names like
 (cm/->edn reg "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel")
 ;; =>
 ;; [:map
+;;  {:closed true}
 ;;  [:$class [:= "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel"]]
 ;;  [:$identifier {:optional true} :string]
 ;;  [:clauseId :string]
@@ -79,6 +80,40 @@ file, checked into git, diffed across model versions, and read back:
 
 ```clojure
 (m/schema (edn/read-string (slurp "schema.edn")) {:registry cm/registry*})
+```
+
+Nested concepts compile to `:ref`s into a local registry that travels with the
+schema, so their contents are actually checked and a concept that refers to
+itself terminates:
+
+```clojure
+[:schema {:registry {"org.accordproject.money@0.3.0.MonetaryAmount"
+                     [:map {:closed true}
+                      [:$class [:= "org.accordproject.money@0.3.0.MonetaryAmount"]]
+                      [:doubleValue :concerto/double]
+                      [:currencyCode [:enum "AED" "AFN" ...]]]
+                     "org.accordproject.promissorynote@0.2.0.TemplateModel"
+                     [:map {:closed true}
+                      ...
+                      [:amount [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]]]}}
+ [:ref "org.accordproject.promissorynote@0.2.0.TemplateModel"]]
+```
+
+A model with nothing nested emits as a plain map, as above.
+
+Maps are closed, matching Concerto, which rejects undeclared properties. Pass
+`:closed false` if the values being validated legitimately carry extra keys,
+though a storage adapter should strip its own derived keys instead — that way
+the guarantee this library offers is the one Concerto offers.
+
+A property whose declared type has several concrete subtypes compiles to a
+`:multi` dispatching on `$class`, because Concerto permits polymorphism and a
+closed schema for the parent alone would reject a legitimate subclass:
+
+```clojure
+[:multi {:dispatch :$class}
+ ["poly@1.0.0.Cat" [:ref "poly@1.0.0.Cat"]]
+ ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
 ```
 
 Non-trivial types are emitted as *named* schemas (`:concerto/date-time`,
@@ -198,24 +233,21 @@ the property rather than compiling to something that accepts any value.
 
 Early. Verified against all 57 templates in the Accord
 [cicero-template-library](https://github.com/accordproject/cicero-template-library):
-55 pass, and the 2 failures are genuine defects in those templates, confirmed
-independently with `concerto validate`.
+53 pass, and all 4 failures are genuine defects in those templates, each
+confirmed independently with `concerto validate`. Two of the four
+(`volumediscountolist`, `volumediscountulist`, whose samples name an unversioned
+`org.accordproject.volumediscountlist.RateRange`) only surfaced once nested
+concepts stopped compiling to a bare `:map`.
 
-The compiled schema is currently **weaker than Concerto's own validator**, in
-roughly the order these matter:
+Still narrower than Concerto's own validator:
 
-- nested concepts compile to `:map`, so their contents are unchecked
-- maps are open, so undeclared properties are accepted
-- no subtype dispatch on abstract declarations
 - `validator` (regex, range) is dropped
 - `defaultValue` is ignored
 - `ScalarDeclaration` and `MapDeclaration` are not handled
-- `$timestamp` never appears in a schema
 
-These are gaps in coverage, not silent ones: an unhandled property kind or an
-unknown metamodel version raises rather than degrading.
-
-Do not rely on it as a substitute for Concerto validation until those close.
+These are gaps in coverage, not silent ones. An unhandled property kind, a type
+whose model is not loaded, or an unknown metamodel version each raise an error
+naming the cause rather than compiling to something permissive.
 
 ## License
 

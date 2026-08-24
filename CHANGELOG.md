@@ -34,6 +34,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   permissive default never fired on any of the 57 templates in the
   cicero-template-library, so it could only ever have masked a real gap.
 
+### Added
+
+- Nested concepts compile to `:ref`s into a local registry instead of a bare
+  `:map`, so their contents are validated. Self-referential and mutually
+  recursive concepts terminate.
+- Maps are closed by default, matching Concerto's rejection of undeclared
+  properties. `:closed false` opts out.
+- A property whose declared type has several concrete subtypes compiles to a
+  `:multi` dispatching on `$class`. Concerto permits polymorphism, so a closed
+  schema for the parent alone would reject a legitimate subclass.
+- `$identifier` and `$timestamp` are admitted where Concerto admits them:
+  `$identifier` on any declaration, `$timestamp` only on transactions and
+  events. Both behaviours were checked against `concerto validate` rather than
+  inferred from the metamodel.
+- A property pointing at a type whose model is not loaded now raises, rather
+  than compiling to a `:map` that checks nothing.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

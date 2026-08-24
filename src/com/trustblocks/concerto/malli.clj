@@ -61,19 +61,69 @@
          {:concerto/date-time date-time
           :concerto/double    double-like}))
 
+;; ---------------------------------------------------------------- the model
+
+(defn- declaration-of [reg fqn] (get-in reg [fqn :declaration]))
+
 (defn- enum? [reg fqn]
-  (= "EnumDeclaration" (mm/metamodel-type (get-in reg [fqn :declaration :$class]))))
+  (= "EnumDeclaration" (mm/metamodel-type (:$class (declaration-of reg fqn)))))
 
 (defn- enum-values [reg fqn]
-  (into [:enum] (map :name) (get-in reg [fqn :declaration :properties])))
+  (into [:enum] (map :name) (:properties (declaration-of reg fqn))))
 
-(defn- property->schema [reg prop]
+(defn- abstract? [reg fqn]
+  (boolean (:isAbstract (declaration-of reg fqn))))
+
+(defn- subtype-index
+  "fqn -> concrete declarations assignable to it, itself included when concrete.
+
+  Concerto is nominally typed and permits polymorphism, so a property declared
+  as `Clause` legitimately holds any concrete subclass of Clause. Validating
+  such a value against Clause's own schema would reject the subclass's extra
+  properties -- which is exactly the false rejection that closing the maps would
+  otherwise introduce. Built once per compilation and sorted, so the emitted
+  schema is deterministic."
+  [reg]
+  (reduce (fn [acc f]
+            (if (abstract? reg f)
+              acc
+              (reduce (fn [acc ancestor] (update acc ancestor (fnil conj []) f))
+                      acc
+                      (mm/super-chain reg f))))
+          {}
+          (sort (keys reg))))
+
+(defn- object-schema
+  "Schema for a value declared as `fqn`: the enum, or a reference to the one
+  concrete type it can be, or a dispatch over every concrete type it could be."
+  [reg subtypes fqn key-fn]
+  (cond
+    (nil? (declaration-of reg fqn))
+    (throw (ex-info (str "Unresolved type " (pr-str fqn) ". Its model is not "
+                         "loaded, so there is nothing to validate the value "
+                         "against. Load the model that declares it.")
+                    {:type fqn}))
+
+    (enum? reg fqn) (enum-values reg fqn)
+
+    :else
+    (let [concrete (get subtypes fqn)]
+      (case (count concrete)
+        ;; Abstract with nothing concrete to stand in for it. Referencing the
+        ;; abstract declaration is the honest reading: its own properties are
+        ;; required, and no instance can legitimately be only this type.
+        0 [:ref fqn]
+        1 [:ref (first concrete)]
+        (into [:multi {:dispatch (key-fn "$class")}]
+              (map (fn [c] [c [:ref c]]))
+              concrete)))))
+
+(defn- property->schema [reg subtypes prop key-fn]
   (let [kind (mm/metamodel-type (:$class prop))
         base (or (scalar kind)
                  (case kind
                    "ObjectProperty"
-                   (let [fqn (mm/type-fqn (:type prop))]
-                     (if (enum? reg fqn) (enum-values reg fqn) :map))
+                   (object-schema reg subtypes (mm/type-fqn (:type prop)) key-fn)
                    ;; relationships store the referenced identifier
                    "RelationshipProperty" :string
                    nil))]
@@ -94,43 +144,141 @@
     (cond-> base
       (:isArray prop) (->> (conj [:sequential])))))
 
+(defn- ordered
+  "Entries deduplicated by key, keeping the first position and the last value.
+
+  A child redeclaring a property overrides its parent's definition but keeps the
+  parent's position. Tracked explicitly rather than with an array-map, which
+  silently becomes an unordered hash-map once it passes eight entries -- the
+  reason an earlier version of this emitted fields in arbitrary order."
+  [entries]
+  (:order (reduce (fn [{:keys [idx order] :as acc} e]
+                    (let [k (first e)]
+                      (if-let [i (idx k)]
+                        (assoc-in acc [:order i] e)
+                        (-> acc
+                            (assoc-in [:idx k] (count order))
+                            (update :order conj e)))))
+                  {:idx {} :order []}
+                  entries)))
+
+(defn- system-properties
+  "Concerto's `$` properties, admitted where Concerto admits them.
+
+  The rule is asymmetric, and both halves are what Concerto was observed to do
+  rather than what the metamodel suggests:
+
+    $identifier  accepted on any declaration. The cicero-template-library's
+                 rental-deposit-with carries one on a plain unidentified
+                 `concept` and `concerto validate` calls that sample valid.
+
+    $timestamp   only on transactions and events. Adding one to that same
+                 concept draws an Unexpected property error naming $timestamp.
+
+  A closed map has to admit whatever Concerto admits, or it turns a valid
+  instance into a false rejection."
+  [reg fqn key-fn]
+  (let [kind (mm/metamodel-type (:$class (declaration-of reg fqn)))]
+    (cond-> [;; $class is the linchpin: it is what makes the flattening
+             ;; lossless, and what :multi dispatches on.
+             [(key-fn "$class") [:= fqn]]
+             [(key-fn "$identifier") {:optional true} :string]]
+
+      (#{"TransactionDeclaration" "EventDeclaration"} kind)
+      (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
+
+(defn- declaration->map
+  "One declaration as a map schema, with its whole inheritance chain flattened
+  into it, parents first."
+  [reg subtypes fqn key-fn closed]
+  (let [entries (for [f    (reverse (mm/super-chain reg fqn))
+                      prop (:properties (declaration-of reg f))]
+                  (let [k (key-fn (:name prop))]
+                    (if (:isOptional prop)
+                      [k {:optional true} (property->schema reg subtypes prop key-fn)]
+                      [k (property->schema reg subtypes prop key-fn)])))]
+    (into (into [:map (cond-> {} closed (assoc :closed true))]
+                (system-properties reg fqn key-fn))
+          (ordered entries))))
+
+(defn- referenced
+  "Every declaration reachable from `root` through ObjectProperty references,
+  following the inheritance chain and every concrete subtype at each step.
+
+  Guarded by `seen`, so a concept that refers to itself -- or a cycle between
+  two -- terminates rather than inlining forever. That is also why the emitted
+  schema uses `:ref` into a local registry instead of nesting the maps."
+  [reg subtypes root]
+  (loop [queue [root], seen #{}]
+    (if (empty? queue)
+      seen
+      (let [fqn  (first queue)
+            more (vec (rest queue))]
+        (if (or (contains? seen fqn)
+                (nil? (declaration-of reg fqn))
+                (enum? reg fqn))
+          (recur more seen)
+          (let [targets (for [ancestor (mm/super-chain reg fqn)
+                              prop     (:properties (declaration-of reg ancestor))
+                              :when    (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
+                              :let     [t (mm/type-fqn (:type prop))]
+                              :when    (and t (declaration-of reg t) (not (enum? reg t)))
+                              target   (cons t (get subtypes t))]
+                          target)]
+            (recur (into more targets) (conj seen fqn))))))))
+
+(defn- references?
+  "Whether `fqn` or any ancestor declares an ObjectProperty pointing at another
+  declaration -- as opposed to an enum, which inlines, or a scalar.
+
+  This is the test for whether a local registry is needed, and it is not the
+  same as asking whether the reachable set is just `fqn`: a concept whose only
+  reference is to itself reaches nothing new, but still emits a :ref that needs
+  somewhere to resolve."
+  [reg fqn]
+  (boolean
+   (some (fn [prop]
+           (and (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
+                (let [t (mm/type-fqn (:type prop))]
+                  (boolean (and t (declaration-of reg t) (not (enum? reg t)))))))
+         (mapcat #(:properties (declaration-of reg %)) (mm/super-chain reg fqn)))))
+
 (defn ->schema
   "Compile a Malli schema for a `$class`, flattening its whole inheritance chain.
 
-  Properties are emitted in declaration order, parents first, so that exporting
-  the same model twice produces the same EDN and two exports diff cleanly."
-  [reg fqn & {:keys [key-fn] :or {key-fn keyword}}]
-  (let [chain (mm/super-chain reg fqn)]
-    (when (empty? chain)
-      (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
-    (let [entries
-          (for [f    (reverse chain)            ; parents first, child overrides
-                prop (get-in reg [f :declaration :properties])
-                :let [k (key-fn (:name prop))]]
-            (if (:isOptional prop)
-              [k {:optional true} (property->schema reg prop)]
-              [k (property->schema reg prop)]))]
-      (m/schema
-       (into [:map
-              ;; $class is the linchpin: it is what makes the flattening lossless.
-              [(key-fn "$class") [:= fqn]]
-              [(key-fn "$identifier") {:optional true} :string]]
-             ;; A child redeclaring a field overrides its parent's definition but
-             ;; keeps the parent's position. Tracked explicitly rather than with
-             ;; an array-map, which silently becomes an unordered hash-map once
-             ;; it passes eight entries -- the reason an earlier version of this
-             ;; emitted fields in arbitrary order.
-             (->> entries
-                  (reduce (fn [{:keys [idx order] :as acc} e]
-                            (let [k (first e)]
-                              (if-let [i (idx k)]
-                                (assoc-in acc [:order i] e)
-                                (-> acc
-                                    (assoc-in [:idx k] (count order))
-                                    (update :order conj e)))))
-                          {:idx {} :order []})
-                  :order))
-       {:registry registry*}))))
+  Maps are closed, matching Concerto, which rejects undeclared properties. Pass
+  `:closed false` only if the values being validated legitimately carry extra
+  keys -- a storage adapter should strip its own derived keys instead, so that
+  the guarantee this library offers is the one Concerto offers.
+
+  Nested concepts compile to `:ref`s into a local registry rather than to a bare
+  `:map`, so their contents are actually checked. A property whose declared type
+  has several concrete subtypes compiles to a `:multi` dispatching on `$class`,
+  because Concerto permits polymorphism and a closed schema for the parent alone
+  would reject a legitimate subclass.
+
+  A model with nothing nested emits as a plain map, since there is nothing to
+  reference."
+  [reg fqn & {:keys [key-fn closed] :or {key-fn keyword closed true}}]
+  (when (empty? (mm/super-chain reg fqn))
+    (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
+  (let [subtypes (subtype-index reg)
+        needed   (referenced reg subtypes fqn)
+        root     (object-schema reg subtypes fqn key-fn)
+        form     (if (and (= [:ref fqn] root) (not (references? reg fqn)))
+                   (declaration->map reg subtypes fqn key-fn closed)
+                   [:schema
+                    ;; A plain map, not a sorted one: malli consults this
+                    ;; registry for keyword types too (:concerto/date-time and
+                    ;; friends), and a string-keyed sorted map throws comparing
+                    ;; those. Built from sorted names so the emitted form is
+                    ;; reproducible.
+                    {:registry (into {}
+                                     (map (fn [f]
+                                            [f (declaration->map reg subtypes f key-fn closed)]))
+                                     (sort needed))}
+                    root])]
+    (m/schema form {:registry registry*})))
 
 (defn ->edn
   "The schema as plain EDN, ready to spit to a file.
