@@ -23,7 +23,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: DeLaGuardo/setup-clojure@v13
+      - uses: DeLaGuardo/setup-clojure@13
         with:
           cli: latest
           bb: latest
@@ -47,7 +47,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: DeLaGuardo/setup-clojure@v13
+      - uses: DeLaGuardo/setup-clojure@13
         with:
           cli: latest
 
