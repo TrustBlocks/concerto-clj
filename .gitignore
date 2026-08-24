@@ -1,0 +1,7 @@
+/target
+/.cpcache
+/.clj-kondo/.cache
+/.lsp
+/.calva
+.DS_Store
+pom.xml.asc

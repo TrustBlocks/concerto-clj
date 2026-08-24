@@ -1,0 +1,59 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # No Node anywhere in this job. The core namespaces are exercised entirely
+  # from checked-in metamodel fixtures, and the CTO tests skip themselves --
+  # a clone must be testable without npm.
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [jvm, babashka]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: DeLaGuardo/setup-clojure@v13
+        with:
+          cli: latest
+          bb: latest
+
+      - name: test (jvm)
+        if: matrix.runtime == 'jvm'
+        run: clojure -M:test
+
+      - name: test (babashka)
+        if: matrix.runtime == 'babashka'
+        run: bb -m runner
+
+  # Same suite with Accord's CLI present, so the CTO parsing path is covered.
+  cto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: DeLaGuardo/setup-clojure@v13
+        with:
+          cli: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm i -g @accordproject/concerto-cli
+      - run: clojure -M:test

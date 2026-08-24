@@ -1,0 +1,20 @@
+{:paths ["src"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.12.5"}
+        metosin/malli       {:mvn/version "0.20.1"}
+        ;; Both ship inside babashka; declared here for JVM use.
+        cheshire/cheshire   {:mvn/version "6.2.0"}
+        babashka/process    {:mvn/version "0.6.25"}}
+
+ :aliases
+ {;; clojure -M:test
+  ;; The runner is plain clojure.test with no extra dependency, so the same
+  ;; command works under babashka (bb -m runner) and the core tests need no
+  ;; Node -- fixtures are checked in under test-resources/.
+  :test  {:extra-paths ["test" "test-resources"]
+          :main-opts   ["-m" "runner"]}
+
+  ;; clojure -T:build jar / install / deploy
+  :build {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}
+                       slipset/deps-deploy           {:mvn/version "0.2.2"}}
+          :ns-default build}}}
