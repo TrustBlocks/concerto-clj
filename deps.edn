@@ -12,7 +12,19 @@
   ;; command works under babashka (bb -m runner) and the core tests need no
   ;; Node -- fixtures are checked in under test-resources/.
   :test  {:extra-paths ["test" "test-resources"]
-          :main-opts   ["-m" "runner"]}
+          :main-opts   ["-m" "com.trustblocks.concerto.test-runner"]}
+
+  ;; clojure -M:cljs-test
+  ;; ClojureScript on Node. Must be run from the project root: the fixtures are
+  ;; read from test-resources/ relative to the working directory, since there is
+  ;; no classpath to resolve them against.
+  :cljs-test
+  {:extra-paths ["test"]
+   :extra-deps  {org.clojure/clojurescript {:mvn/version "1.12.42"}}
+   :main-opts   ["-m" "cljs.main"
+                 "--target" "node"
+                 "--output-to" "target/cljs-test.js"
+                 "--compile" "com.trustblocks.concerto.test-runner"]}
 
   ;; clojure -T:build jar / install / deploy
   :build {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}

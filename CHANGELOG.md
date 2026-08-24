@@ -51,6 +51,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A property pointing at a type whose model is not loaded now raises, rather
   than compiling to a `:map` that checks nothing.
 
+### Changed
+
+- `DateTime` is validated on its wire form with a lexical check, rather than by
+  accepting any string and any JVM date object. The previous predicate passed
+  `"hello"` and `""`, both of which Concerto rejects. The accepted envelope was
+  measured against `concerto validate`; all 24 cases are in the test suite.
+- `metamodel`, `malli` and `instance` are `.cljc` and carry no platform
+  references; `cto` stays `.clj`. The suite runs under the JVM, babashka and
+  ClojureScript on Node, so a document cannot be valid on one and invalid on
+  another.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

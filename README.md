@@ -192,15 +192,48 @@ contract.
 ## Development
 
 ```
-clojure -M:test          # JVM
-bb -m runner             # babashka
-clojure -T:build jar     # target/concerto-clj-VERSION.jar
+clojure -M:test                                  # JVM
+bb -m com.trustblocks.concerto.test-runner       # babashka
+clojure -M:cljs-test && node target/cljs-test.js # ClojureScript on Node
+clojure -T:build jar                             # target/concerto-clj-VERSION.jar
 clojure -T:build install
 ```
 
 The core tests run from checked-in metamodel fixtures under `test-resources/`
 and need neither Node nor network; the CTO tests skip themselves when the CLI
 is absent. A fresh clone tests green on a machine that has never seen npm.
+
+## Platforms
+
+`metamodel`, `malli` and `instance` are `.cljc` and carry no platform
+references. `cto` is `.clj` — it reads files and spawns a process.
+
+That matters for more than packaging. Concerto's own regex validators are
+JavaScript regexes (`{"pattern": ..., "flags": ...}` is `new RegExp`), and its
+DateTime and Long types behave differently on the two platforms:
+
+```
+Long 2^60, which concerto validate accepts as legal
+  JSON text          1152921504606846976
+  after JS round-trip 1152921504606847000     <- silently corrupted
+  JVM                 1152921504606846976
+
+DateTime with offset and microseconds
+  original            2019-01-20T01:00:00.123456+01:00
+  via js/Date         2019-01-20T00:00:00.123Z   <- offset and µs gone
+  JVM OffsetDateTime  2019-01-20T01:00:00.123456+01:00
+```
+
+The library keeps that divergence out of the schema by validating the **wire
+form** — a DateTime is an ISO-8601 string, a Long is a JSON number — and never
+the parsed platform value. Coercion into `OffsetDateTime` or `Date` is a
+separate concern. The same suite runs under the JVM, babashka and ClojureScript
+precisely so that a document cannot be valid on the server and invalid in the
+browser.
+
+Note what the second table implies: `JSON.parse` destroys a large `Long` before
+any JavaScript validator can see it. Detecting that loss is only possible from a
+platform that does not suffer it.
 
 ## Metamodel versions
 

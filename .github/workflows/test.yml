@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [jvm, babashka]
+        runtime: [jvm, babashka, clojurescript]
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +34,21 @@ jobs:
 
       - name: test (babashka)
         if: matrix.runtime == 'babashka'
-        run: bb -m runner
+        run: bb -m com.trustblocks.concerto.test-runner
+
+      # ClojureScript on Node. The core namespaces are .cljc and carry no
+      # platform references, so the same suite must pass here -- a contract
+      # must not be valid on the server and invalid in the browser.
+      - uses: actions/setup-node@v4
+        if: matrix.runtime == 'clojurescript'
+        with:
+          node-version: '20'
+
+      - name: test (clojurescript)
+        if: matrix.runtime == 'clojurescript'
+        run: |
+          clojure -M:cljs-test
+          node target/cljs-test.js
 
   # Same suite with Accord's CLI present, so the CTO parsing path is covered.
   cto:
