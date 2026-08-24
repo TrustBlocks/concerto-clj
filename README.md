@@ -191,6 +191,63 @@ $ bb script/cto2edn.clj promissory-note/model --validate promissory-note/sample.
 VALID   org.accordproject.promissorynote@0.2.0.TemplateModel
 ```
 
+## Pulling a published template
+
+`script/fetch_template.clj` downloads a template from
+[templates.accordproject.org](https://templates.accordproject.org/), extracts
+the Concerto parts and converts them:
+
+```console
+$ bb script/fetch_template.clj acceptance-of-delivery@1.0.0 -o out/
+
+acceptance-of-delivery@1.0.0   runtime=typescript  kind=clause  cicero=^1.0.0
+
+models
+  model.cto
+  @models.accordproject.org.accordproject.contract@0.2.0.cto
+  ...
+
+16 declarations
+
+instances shipped in the archive
+  request.json             org.accordproject...InspectDeliverable
+                           VALID
+
+wrote out/registry.edn and 16 schemas
+```
+
+Only part of an archive is Concerto — `model/*.cto` and any instance such as
+`request.json`. The clause logic is not, and is not touched. Its *signature*
+is, though: the request and response types are declared in the model, so the
+emitted schemas describe the boundary any implementation of that clause must
+honour, whatever language it is written in.
+
+Note `runtime=typescript` in the header. That field has already taken more than
+one value in published templates — older ones say `ergo` — so the archive format
+treats the logic runtime as pluggable.
+
+### The EDN is the portable artifact
+
+Everything upstream of the EDN needs network, a filesystem and Node. Everything
+downstream needs none of them:
+
+```
+fetch → unzip → parse CTO → EDN     babashka or JVM only
+                ───────────────
+                     EDN            JVM, babashka, ClojureScript, browser
+```
+
+The same emitted schema file, loaded standalone with no CLI and no network,
+gives identical verdicts on all three runtimes:
+
+```
+                    JVM     babashka   ClojureScript
+valid request       true    true       true
+bad boolean         false   false      false
+bad datetime        false   false      false
+undeclared key      false   false      false
+```
+
 ## Parsing CTO text
 
 `com.trustblocks.concerto.cto` shells out to Accord's CLI:

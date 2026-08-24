@@ -5,3 +5,4 @@
 /.calva
 .DS_Store
 pom.xml.asc
+.cache/

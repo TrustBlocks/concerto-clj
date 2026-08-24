@@ -75,6 +75,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   today, whatever Concerto adds next -- raises rather than falling through to
   being compiled as a map.
 
+### Added
+
+- `script/fetch_template.clj` — pull a published template from
+  templates.accordproject.org, convert its models to EDN, and validate any
+  Concerto instance the archive ships. Uses only babashka built-ins.
+
+### Fixed
+
+- A declaration with concrete subtypes compiles to a `:multi` whose branches
+  reference them, but the transitive closure was seeded with the root alone, so
+  those branches pointed at declarations absent from the local registry and the
+  schema failed to build with `:malli.core/invalid-ref`. Surfaced by running the
+  fetch script over a real template.
+- Compiling a schema for an enum or scalar declaration directly no longer tries
+  to compile it as a map.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

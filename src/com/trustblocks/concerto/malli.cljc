@@ -370,7 +370,11 @@
   two -- terminates rather than inlining forever. That is also why the emitted
   schema uses `:ref` into a local registry instead of nesting the maps."
   [reg subtypes root]
-  (loop [queue [root], seen #{}]
+  ;; Seeded with the root's concrete subtypes as well as the root itself: when
+  ;; the root has subtypes it compiles to a :multi whose branches reference
+  ;; them, and a branch pointing at something absent from the local registry is
+  ;; an invalid-ref at schema-build time.
+  (loop [queue (into [root] (get subtypes root)), seen #{}]
     (if (empty? queue)
       seen
       (let [fqn  (first queue)
@@ -432,8 +436,17 @@
   (let [subtypes (subtype-index reg)
         needed   (referenced reg subtypes fqn)
         root     (object-schema reg subtypes fqn key-fn)
-        form     (if (and (= [:ref fqn] root) (not (references? reg fqn)))
+        form     (cond
+                   ;; An enum or scalar root is a value, not a tagged object,
+                   ;; so object-schema has already produced the whole thing.
+                   (empty? needed) root
+
+                   ;; Nothing to reference: emit the map itself, so a simple
+                   ;; model stays readable as a simple schema.
+                   (and (= [:ref fqn] root) (not (references? reg fqn)))
                    (declaration->map reg subtypes fqn key-fn closed)
+
+                   :else
                    [:schema
                     ;; A plain map, not a sorted one: malli consults this
                     ;; registry for keyword types too (:concerto/date-time and

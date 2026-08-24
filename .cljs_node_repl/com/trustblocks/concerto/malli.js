@@ -470,7 +470,7 @@ return G__4894;
  *   schema uses `:ref` into a local registry instead of nesting the maps.
  */
 com.trustblocks.concerto.malli.referenced = (function com$trustblocks$concerto$malli$referenced(reg,subtypes,root){
-var queue = new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [root], null);
+var queue = cljs.core.into.call(null,new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [root], null),cljs.core.get.call(null,subtypes,root));
 var seen = cljs.core.PersistentHashSet.EMPTY;
 while(true){
 if(cljs.core.empty_QMARK_.call(null,queue)){
@@ -703,9 +703,10 @@ throw cljs.core.ex_info.call(null,"Unknown $class -- is its model loaded?",new c
 var subtypes = com.trustblocks.concerto.malli.subtype_index.call(null,reg);
 var needed = com.trustblocks.concerto.malli.referenced.call(null,reg,subtypes,fqn);
 var root = com.trustblocks.concerto.malli.object_schema.call(null,reg,subtypes,fqn,key_fn);
-var form = ((((cljs.core._EQ_.call(null,new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"ref","ref",1289896967),fqn], null),root)) && ((!(com.trustblocks.concerto.malli.references_QMARK_.call(null,reg,fqn))))))?com.trustblocks.concerto.malli.declaration__GT_map.call(null,reg,subtypes,fqn,key_fn,closed):new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"schema","schema",-1582001791),new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"registry","registry",1021159018),cljs.core.into.call(null,cljs.core.PersistentArrayMap.EMPTY,cljs.core.map.call(null,(function (f){
+var form = ((cljs.core.empty_QMARK_.call(null,needed))?root:((((cljs.core._EQ_.call(null,new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"ref","ref",1289896967),fqn], null),root)) && ((!(com.trustblocks.concerto.malli.references_QMARK_.call(null,reg,fqn))))))?com.trustblocks.concerto.malli.declaration__GT_map.call(null,reg,subtypes,fqn,key_fn,closed):new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"schema","schema",-1582001791),new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"registry","registry",1021159018),cljs.core.into.call(null,cljs.core.PersistentArrayMap.EMPTY,cljs.core.map.call(null,(function (f){
 return new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [f,com.trustblocks.concerto.malli.declaration__GT_map.call(null,reg,subtypes,f,key_fn,closed)], null);
-})),cljs.core.sort.call(null,needed))], null),root], null));
+})),cljs.core.sort.call(null,needed))], null),root], null)
+));
 return malli.core.schema.call(null,form,new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"registry","registry",1021159018),com.trustblocks.concerto.malli.registry_STAR_], null));
 }));
 
