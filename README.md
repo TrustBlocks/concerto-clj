@@ -6,9 +6,13 @@ runtime.
 
 No code generation. A new contract type is a data load, not a deploy.
 
-```clojure
-com.trustblocks/concerto-clj {:mvn/version "0.1.0"}
-```
+> **Not on Clojars yet.** The validation gaps listed under
+> [Status](#status) are still open, so nothing has been released. Depend on
+> the repository directly and pin a commit from `git log`:
+>
+> ```clojure
+> {:deps {io.github.TrustBlocks/concerto-clj {:git/sha "..."}}}
+> ```
 
 ## Why
 
@@ -109,7 +113,7 @@ Everything except the JVM-only bits runs under babashka.
 `bb.edn`:
 
 ```clojure
-{:deps {com.trustblocks/concerto-clj {:mvn/version "0.1.0"}}}
+{:deps {io.github.TrustBlocks/concerto-clj {:git/sha "..."}}}
 ```
 
 `script/cto2edn.clj` in this repo is a worked example:
