@@ -386,3 +386,134 @@
           sample (inst/json->edn (fx/sample "promissory-note"))]
       (is (not (m/validate schema (assoc sample :date #?(:clj  (java.time.Instant/now)
                                                          :cljs (js/Date.)))))))))
+
+;; ------------------------------------------------------------- validators
+
+(defn- mmc [t] (str "concerto.metamodel@1.0.0." t))
+
+(def ^:private validated
+  (mm/registry
+   [{:$class    (mmc "Model")
+     :namespace "v@1.0.0"
+     :imports   []
+     :declarations
+     [{:$class    (mmc "StringScalar")
+       :name      "CountryCode"
+       :validator {:$class (mmc "StringRegexValidator") :pattern "^[A-Z]{2}$" :flags ""}}
+
+      {:$class (mmc "MapDeclaration") :name "Dictionary"}
+
+      (decl "ConceptDeclaration" "V"
+            :props
+            [(assoc (prop "StringProperty" "code")
+                    :validator {:$class (mmc "StringRegexValidator")
+                                :pattern "^[A-Z]{3}$" :flags ""})
+             (assoc (prop "StringProperty" "ci")
+                    :validator {:$class (mmc "StringRegexValidator")
+                                :pattern "^abc$" :flags "i"})
+             (assoc (prop "StringProperty" "loose")
+                    :validator {:$class (mmc "StringRegexValidator")
+                                :pattern "BC" :flags ""})
+             (assoc (prop "StringProperty" "label")
+                    :lengthValidator {:$class (mmc "StringLengthValidator")
+                                      :minLength 1 :maxLength 10})
+             (assoc (prop "StringProperty" "minonly")
+                    :lengthValidator {:$class (mmc "StringLengthValidator") :minLength 2})
+             (assoc (prop "IntegerProperty" "icount")
+                    :validator {:$class (mmc "IntegerDomainValidator") :lower 0 :upper 100})
+             (assoc (prop "LongProperty" "lcount")
+                    :validator {:$class (mmc "LongDomainValidator") :upper 500})
+             (assoc (prop "DoubleProperty" "drate")
+                    :validator {:$class (mmc "DoubleDomainValidator") :lower 0 :upper 1})
+             (prop "ObjectProperty" "country" :type "CountryCode")])]}]))
+
+(def ^:private valid-v
+  {:$class "v@1.0.0.V" :code "ABC" :ci "abc" :loose "XBCX" :label "ok" :minonly "ok"
+   :icount 50 :lcount 100 :drate 0.5 :country "US"})
+
+(deftest validators-are-enforced
+  (testing "each verdict below matches what `concerto validate` gave for the
+           same instance against the equivalent CTO"
+    (let [schema (cm/->schema validated "v@1.0.0.V")
+          ok?    #(m/validate schema (merge valid-v %))]
+
+      (is (ok? {}))
+
+      (testing "regex"
+        (is (not (ok? {:code "abc"})))
+        (testing "the i flag survives to both engines"
+          (is (ok? {:ci "ABC"}))
+          (is (not (ok? {:ci "zzz"}))))
+        (testing "Concerto tests for a match anywhere, and so does :re"
+          (is (ok? {:loose "XBCX"}))
+          (is (not (ok? {:loose "zzz"})))))
+
+      (testing "length"
+        (is (not (ok? {:label "01234567890"})))
+        (is (not (ok? {:label ""})))
+        (testing "a one-sided bound leaves the other end open"
+          (is (not (ok? {:minonly "a"})))
+          (is (ok? {:minonly "aaaaaaaaaaaaaaaaaaaa"}))))
+
+      (testing "numeric domains, inclusive at both ends"
+        (is (not (ok? {:icount 101})))
+        (is (not (ok? {:icount -1})))
+        (is (ok? {:icount 100}))
+        (is (ok? {:icount 0}))
+        (is (not (ok? {:lcount 501})))
+        (is (ok? {:lcount -99999}))
+        (is (not (ok? {:drate 1.5})))
+        (is (ok? {:drate 1.0}))))))
+
+(deftest scalars-inline-as-their-primitive
+  (testing "a scalar is a value, not a tagged object. Compiling it as a concept
+           produced a closed map with only $class, which rejected the plain
+           string a scalar actually is -- a false rejection of valid data."
+    (let [by-k (by-key (map-for (cm/->edn validated "v@1.0.0.V") "v@1.0.0.V"))]
+      (is (= [:and :string [:re "^[A-Z]{2}$"]] (:country by-k))))
+
+    (let [schema (cm/->schema validated "v@1.0.0.V")]
+      (is (m/validate schema valid-v))
+      (is (not (m/validate schema (assoc valid-v :country "UNITED STATES"))))
+      (is (not (m/validate schema (assoc valid-v :country {:$class "v@1.0.0.CountryCode"}))))))
+
+  (testing "and it needs no entry in the local registry, being inlined"
+    (let [form (cm/->edn validated "v@1.0.0.V")]
+      (is (not (contains? (:registry (second form)) "v@1.0.0.CountryCode"))))))
+
+(deftest a-model-with-validators-still-exports-as-edn
+  (testing "patterns are emitted as strings. A compiled #\"...\" is a Clojure
+           reader literal, not EDN, so it would read back only by accident on
+           the JVM and not at all through clojure.edn."
+    (let [form (cm/->edn validated "v@1.0.0.V")]
+      (is (not (re-find #"#object|fn__|#function" (pr-str form))))
+      (is (= form (edn/read-string (pr-str form))))
+
+      (testing "and the revived schema still enforces every validator"
+        (let [revived (m/schema (edn/read-string (pr-str form)) {:registry cm/registry*})]
+          (is (m/validate revived valid-v))
+          (is (not (m/validate revived (assoc valid-v :code "abc"))))
+          (is (not (m/validate revived (assoc valid-v :icount 101))))
+          (is (not (m/validate revived (assoc valid-v :country "UNITED STATES")))))))))
+
+(deftest unsupported-declaration-kinds-are-refused
+  (testing "map declarations are not handled, and say so rather than compiling
+           to a schema that describes nothing"
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                          #"Cannot compile declaration .* of kind \"MapDeclaration\""
+                          (cm/->schema validated "v@1.0.0.Dictionary")))))
+
+(deftest unportable-regex-flags-are-refused
+  (testing "Concerto's regexes are JavaScript regexes. i, m and s mean the same
+           on both engines; u does not, and silently dropping it would change
+           what the pattern accepts."
+    (let [reg (mm/registry
+               [{:$class (mmc "Model") :namespace "u@1.0.0" :imports []
+                 :declarations
+                 [(decl "ConceptDeclaration" "U"
+                        :props [(assoc (prop "StringProperty" "s")
+                                       :validator {:$class  (mmc "StringRegexValidator")
+                                                   :pattern "\\p{L}+" :flags "u"})])]}])]
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                            #"Unsupported regex flag"
+                            (cm/->schema reg "u@1.0.0.U"))))))

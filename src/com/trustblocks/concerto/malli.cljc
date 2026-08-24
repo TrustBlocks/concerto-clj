@@ -100,8 +100,125 @@
 
 (defn- declaration-of [reg fqn] (get-in reg [fqn :declaration]))
 
+(defn- declaration-kind [reg fqn]
+  (mm/metamodel-type (:$class (declaration-of reg fqn))))
+
 (defn- enum? [reg fqn]
-  (= "EnumDeclaration" (mm/metamodel-type (:$class (declaration-of reg fqn)))))
+  (= "EnumDeclaration" (declaration-kind reg fqn)))
+
+(def scalar-declarations
+  "Concerto 3 scalar declarations -- a named primitive, optionally constrained.
+
+  A scalar is a *value*, not a tagged object, so it inlines as its underlying
+  type rather than compiling to a map or being referenced. Treating one as a
+  concept produced a closed map with only `$class`, which rejected the plain
+  string a scalar actually is."
+  {"StringScalar"   :string
+   "BooleanScalar"  :boolean
+   "DoubleScalar"   :concerto/double
+   "IntegerScalar"  :int
+   "LongScalar"     :int
+   "DateTimeScalar" :concerto/date-time})
+
+(def map-like-declarations
+  "Declaration kinds that compile to a Malli map -- those that describe a tagged
+  object with properties. Enums compile to `:enum` and are handled separately."
+  #{"ConceptDeclaration" "AssetDeclaration" "TransactionDeclaration"
+    "ParticipantDeclaration" "EventDeclaration"})
+
+(defn- check-compilable!
+  "Raise unless `fqn` is a declaration kind this library can turn into a schema.
+
+  Without this, anything with a `$class` that was not an enum fell through to
+  being compiled as a map. A `scalar CountryCode extends String` therefore
+  became a closed map with only `$class`, so a perfectly valid \"US\" was
+  reported as an invalid type -- a false rejection of data Concerto accepts.
+
+  Naming the unsupported kind turns that into an answer. It also means the next
+  declaration kind Concerto introduces stops the compile instead of quietly
+  producing a schema that describes nothing."
+  [reg fqn]
+  (let [kind (declaration-kind reg fqn)]
+    (when-not (or (contains? map-like-declarations kind)
+                  (contains? scalar-declarations kind)
+                  (= "EnumDeclaration" kind))
+      (throw (ex-info (str "Cannot compile declaration " (pr-str fqn) " of kind "
+                           (pr-str kind) ". This library handles concepts, assets, "
+                           "transactions, participants, events, enums and scalars; "
+                           "map declarations are not supported yet. Refusing to "
+                           "emit a schema rather than guess at one.")
+                      {:declaration fqn
+                       :kind        kind
+                       :supported   (sort (into #{"EnumDeclaration"}
+                                                (concat map-like-declarations
+                                                        (keys scalar-declarations))))})))))
+
+;; ---------------------------------------------------------------- validators
+
+(def ^:private portable-regex-flags
+  "Regex flags with the same meaning on both engines.
+
+  Concerto's regexes are JavaScript regexes -- `{pattern, flags}` is literally
+  `new RegExp(...)`. `g` and `y` do not affect a membership test, but `u`
+  changes matching semantics and has no equivalent meaning as a JVM inline flag,
+  so it is refused rather than dropped: silently discarding a flag would change
+  what the pattern accepts."
+  #{\i \m \s})
+
+(defn- regex-schema [{:keys [pattern flags]}]
+  (let [flags (or flags "")
+        bad   (remove portable-regex-flags flags)]
+    (when (seq bad)
+      (throw (ex-info (str "Unsupported regex flag(s) " (pr-str (apply str bad))
+                           " in pattern " (pr-str pattern)
+                           ". Only i, m and s carry the same meaning on the JVM "
+                           "and in JavaScript; dropping a flag would silently "
+                           "change what the pattern accepts.")
+                      {:pattern pattern :flags flags :unsupported (apply str bad)})))
+    ;; Emitted as a string, not a compiled pattern. Malli's :re accepts either,
+    ;; but #"..." is a Clojure reader literal and not EDN -- a compiled pattern
+    ;; here would break the round-trip that the rest of the schema guarantees.
+    ;;
+    ;; ClojureScript's re-pattern lifts a leading (?flags) group into RegExp
+    ;; flags, and the JVM reads the same thing as an inline flag, so one
+    ;; spelling serves both. Concerto tests for a match anywhere in the string,
+    ;; which is what Malli's :re does too -- neither anchors.
+    [:re (if (seq flags) (str "(?" flags ")" pattern) pattern)]))
+
+(defn- domain-schemas [{:keys [lower upper]}]
+  (cond-> []
+    (some? lower) (conj [:>= lower])
+    (some? upper) (conj [:<= upper])))
+
+(defn- length-schema [{:keys [minLength maxLength]}]
+  [:string (cond-> {}
+             (some? minLength) (assoc :min minLength)
+             (some? maxLength) (assoc :max maxLength))])
+
+(defn- validator-schemas
+  "Extra schemas contributed by one validator node, or nil."
+  [validator]
+  (when validator
+    (case (mm/metamodel-type (:$class validator))
+      "StringRegexValidator"  [(regex-schema validator)]
+      "StringLengthValidator" [(length-schema validator)]
+      ("IntegerDomainValidator" "LongDomainValidator" "DoubleDomainValidator")
+      (domain-schemas validator)
+      (throw (ex-info (str "Unknown validator " (pr-str (:$class validator))
+                           ". Refusing to emit a schema that would ignore it.")
+                      {:validator validator})))))
+
+(defn- constrained
+  "Apply a node's validators to its compiled schema.
+
+  Base first, so that `:and` short-circuits before a bound is compared against
+  something that is not a number. Concerto carries the length constraint in a
+  separate `lengthValidator` field from the regex in `validator`, and a property
+  may have both."
+  [base node]
+  (let [extra (concat (validator-schemas (:validator node))
+                      (validator-schemas (:lengthValidator node)))]
+    (if (seq extra) (into [:and base] extra) base)))
 
 (defn- enum-values [reg fqn]
   (into [:enum] (map :name) (:properties (declaration-of reg fqn))))
@@ -141,8 +258,15 @@
 
     (enum? reg fqn) (enum-values reg fqn)
 
+    ;; A scalar is a value, not a tagged object: inline the underlying
+    ;; primitive with the scalar's own constraints, rather than referencing it.
+    (contains? scalar-declarations (declaration-kind reg fqn))
+    (constrained (scalar-declarations (declaration-kind reg fqn))
+                 (declaration-of reg fqn))
+
     :else
-    (let [concrete (get subtypes fqn)]
+    (let [_        (check-compilable! reg fqn)
+          concrete (get subtypes fqn)]
       (case (count concrete)
         ;; Abstract with nothing concrete to stand in for it. Referencing the
         ;; abstract declaration is the honest reading: its own properties are
@@ -176,7 +300,8 @@
                       {:property (:name prop)
                        :$class   (:$class prop)
                        :kind     kind})))
-    (cond-> base
+    ;; Constraints apply to each element, so they go on before :sequential.
+    (cond-> (constrained base prop)
       (:isArray prop) (->> (conj [:sequential])))))
 
 (defn- ordered
@@ -226,6 +351,7 @@
   "One declaration as a map schema, with its whole inheritance chain flattened
   into it, parents first."
   [reg subtypes fqn key-fn closed]
+  (check-compilable! reg fqn)
   (let [entries (for [f    (reverse (mm/super-chain reg fqn))
                       prop (:properties (declaration-of reg f))]
                   (let [k (key-fn (:name prop))]
@@ -251,13 +377,16 @@
             more (vec (rest queue))]
         (if (or (contains? seen fqn)
                 (nil? (declaration-of reg fqn))
-                (enum? reg fqn))
+                (enum? reg fqn)
+                (contains? scalar-declarations (declaration-kind reg fqn)))
           (recur more seen)
           (let [targets (for [ancestor (mm/super-chain reg fqn)
                               prop     (:properties (declaration-of reg ancestor))
                               :when    (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
                               :let     [t (mm/type-fqn (:type prop))]
-                              :when    (and t (declaration-of reg t) (not (enum? reg t)))
+                              :when    (and t (declaration-of reg t) (not (enum? reg t))
+                                            (not (contains? scalar-declarations
+                                                            (declaration-kind reg t))))
                               target   (cons t (get subtypes t))]
                           target)]
             (recur (into more targets) (conj seen fqn))))))))
@@ -275,7 +404,10 @@
    (some (fn [prop]
            (and (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
                 (let [t (mm/type-fqn (:type prop))]
-                  (boolean (and t (declaration-of reg t) (not (enum? reg t)))))))
+                  (boolean (and t (declaration-of reg t)
+                                (not (enum? reg t))
+                                (not (contains? scalar-declarations
+                                                (declaration-kind reg t))))))))
          (mapcat #(:properties (declaration-of reg %)) (mm/super-chain reg fqn)))))
 
 (defn ->schema

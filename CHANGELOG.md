@@ -62,6 +62,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ClojureScript on Node, so a document cannot be valid on one and invalid on
   another.
 
+### Added
+
+- Validators are enforced: `StringRegexValidator`, `StringLengthValidator` and
+  the Integer/Long/Double domain validators, including one-sided bounds. Every
+  verdict was checked against `concerto validate` on an equivalent model.
+- Scalar declarations compile to their underlying primitive with their own
+  validators applied, instead of being treated as concepts. Previously a
+  `scalar CountryCode extends String` became a closed map with only `$class`,
+  so a valid `"US"` was reported as an invalid type.
+- Declaration kinds are whitelisted. An unsupported kind -- `MapDeclaration`
+  today, whatever Concerto adds next -- raises rather than falling through to
+  being compiled as a map.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

@@ -116,6 +116,27 @@ closed schema for the parent alone would reject a legitimate subclass:
  ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
 ```
 
+Validators are enforced. `regex`, `length` and `range` compile to Malli
+constraints, and scalar declarations inline as their underlying primitive with
+their own constraints applied:
+
+```clojure
+[:code    [:and :string [:re "^[A-Z]{3}$"]]]
+[:label   [:and :string [:string {:min 1 :max 10}]]]
+[:icount  [:and :int [:>= 0] [:<= 100]]]
+[:country [:and :string [:re "^[A-Z]{2}$"]]]   ; scalar CountryCode
+```
+
+Patterns are emitted as strings rather than compiled patterns, because `#"..."`
+is a Clojure reader literal and not EDN — a compiled pattern would break the
+round-trip the rest of the schema guarantees.
+
+Concerto's regexes are JavaScript regexes and it tests for a match anywhere in
+the string, which is what Malli's `:re` does too. The `i`, `m` and `s` flags
+carry the same meaning on both engines and are passed through; anything else
+raises rather than being silently dropped, since discarding a flag changes what
+the pattern accepts.
+
 Non-trivial types are emitted as *named* schemas (`:concerto/date-time`,
 `:concerto/double`) resolved from `registry*`, which keeps a dump legible to a
 reader who does not know Clojure and decouples what a schema says from what it
@@ -274,13 +295,13 @@ concepts stopped compiling to a bare `:map`.
 
 Still narrower than Concerto's own validator:
 
-- `validator` (regex, range) is dropped
 - `defaultValue` is ignored
-- `ScalarDeclaration` and `MapDeclaration` are not handled
+- `MapDeclaration` is not handled
 
-These are gaps in coverage, not silent ones. An unhandled property kind, a type
-whose model is not loaded, or an unknown metamodel version each raise an error
-naming the cause rather than compiling to something permissive.
+These are gaps in coverage, not silent ones. An unhandled declaration kind, an
+unhandled property kind, an unportable regex flag, a type whose model is not
+loaded, or an unknown metamodel version each raise an error naming the cause
+rather than compiling to something permissive.
 
 ## License
 
