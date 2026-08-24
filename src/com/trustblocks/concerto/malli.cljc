@@ -29,17 +29,52 @@
    "DoubleProperty"   :concerto/double
    "IntegerProperty"  :int
    ;; Long is 64-bit in the spec but only 2^53-safe in Concerto's JS runtime.
-   ;; On the JVM it is a true java.lang.Long, so precision is only at risk when
-   ;; a value crosses the JS boundary.
+   ;; On the JVM it survives as a 64-bit integer; in JavaScript it does not,
+   ;; and JSON.parse has already destroyed the value before any validator sees
+   ;; it. That loss is only detectable from a platform that does not suffer it.
    "LongProperty"     :int
    "DateTimeProperty" :concerto/date-time})
 
+(def date-time-pattern
+  "Concerto's DateTime envelope, as observed rather than as specified.
+
+  `concerto validate` accepts a good deal more than ISO-8601: a bare year, the
+  basic form `20190120`, a space instead of `T`, a leading `+`, a trailing `T`
+  with no time, and a date-only `2019-13-45` with no calendar check. It draws
+  the line at time components -- hour 25, minute 99, second 60 and a date-only
+  form promoted to a full timestamp are all rejected. Each case here was run
+  through the CLI; the test suite carries the whole table.
+
+  Assembled from parts rather than written as one literal because JavaScript
+  regular expressions have no free-spacing mode. Nothing here uses lookbehind,
+  named groups or flags, so the JVM and JS engines give identical answers --
+  which is the point: a date must not be valid on the server and invalid in the
+  browser."
+  (let [yyyy  "\\+?\\d{4}"
+        loose "(?:-?\\d{2}(?:-?\\d{2})?)?"
+        mm    "(?:0[1-9]|1[0-2])"
+        dd    "(?:0[1-9]|[12]\\d|3[01])"
+        hh    "(?:[01]\\d|2[0-3])"
+        nn    "[0-5]\\d"
+        time  (str "(?:" hh "(?::?" nn "(?::?" nn "(?:\\.\\d+)?)?)?)?")
+        zone  "(?:Z|[+-](?:[01]\\d|2[0-3]):?[0-5]\\d)?"]
+    (re-pattern (str "^(?:" yyyy loose
+                     "|" yyyy "-?" mm "-?" dd "[T ]" time zone ")$"))))
+
 (def date-time
-  "Concerto DateTime accepts an ISO-8601 string or an already-parsed instant."
-  [:fn {:error/message "should be a date-time"}
-   #(or (string? %)
-        (instance? java.time.OffsetDateTime %)
-        (instance? java.time.Instant %))])
+  "Concerto DateTime, checked on the wire form rather than by parsing.
+
+  A DateTime *is* an ISO-8601 string in Concerto's JSON; parsing it into a
+  platform type is a separate concern and a lossy one. `js/Date` drops the
+  offset and everything below milliseconds, `java.time.OffsetDateTime` keeps
+  both -- so a schema written in terms of parsed values would accept different
+  documents depending on where it ran. Checking the text keeps the verdict the
+  same everywhere.
+
+  An earlier version accepted any string at all, plus JVM date objects. That
+  passed \"hello\" and \"\", which Concerto rejects, and admitted types with no
+  JavaScript counterpart."
+  [:and :string [:re {:error/message "should be a date-time"} date-time-pattern]])
 
 (def double-like
   "Concerto Double. JSON has no int/double distinction for whole numbers, so a

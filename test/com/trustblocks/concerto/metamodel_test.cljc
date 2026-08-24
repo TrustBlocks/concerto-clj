@@ -92,7 +92,7 @@
                       :name      nm :namespace "x@1.0.0"})
         reg {"x@1.0.0.A" {:declaration {:superType (ti "B")}}
              "x@1.0.0.B" {:declaration {:superType (ti "A")}}}]
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Cyclic"
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo) #"Cyclic"
                           (mm/super-chain reg "x@1.0.0.A")))))
 
 (deftest identity-field-is-inherited
@@ -137,12 +137,12 @@
            inherited properties vanish -- and the resulting schema compiles
            clean and accepts anything."
     (let [bumped (first (fx/models-at-metamodel-version "promissory-note" "2.0.0"))]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                             #"Unsupported Concerto metamodel version 2\.0\.0"
                             (mm/check-metamodel-version! bumped)))
 
       (testing "and the registry refuses too, so nothing downstream sees it"
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+        (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                               #"Unsupported Concerto metamodel version"
                               (mm/registry [bumped])))))))
 

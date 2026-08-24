@@ -215,7 +215,7 @@
           (is (contains? money :concerto/class)))))))
 
 (deftest unknown-class-is-an-error-not-a-nil
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown \$class"
+  (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo) #"Unknown \$class"
                         (cm/->schema (fx/registry "promissory-note") "no.such@1.0.0.Thing"))))
 
 ;; ------------------------------------------------------------- polymorphism
@@ -309,7 +309,7 @@
                               :name       "T"
                               :properties [{:$class "concerto.metamodel@1.0.0.QuantumProperty"
                                             :name   "spooky"}]}}}]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                             #"Cannot compile property \"spooky\""
                             (cm/->schema reg "x@1.0.0.T"))))))
 
@@ -323,6 +323,66 @@
                                             :name   "thing"
                                             :type   {:$class "concerto.metamodel@1.0.0.TypeIdentifier"
                                                      :name   "Missing"}}]}}}]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                             #"Unresolved type"
                             (cm/->schema reg "x@1.0.0.T"))))))
+
+;; ------------------------------------------------------------------ datetime
+
+(def ^:private datetime-envelope
+  "Every case run through `concerto validate`, with the verdict it gave.
+
+  Concerto's DateTime is far looser than ISO-8601 on the date part and strict on
+  the time part. Encoding the whole table means any divergence from the
+  reference implementation shows up as a named failing case rather than as a
+  surprise in production."
+  [["2019-01-20T01:00:00.000+01:00"    true]
+   ["2019-01-20T01:00:00.123456+01:00" true]
+   ["2019-01-20T01:00:00Z"             true]
+   ["2019-01-20T01:00:00"              true]
+   ["2019-01-20T01:00"                 true]
+   ["2019-01-20"                       true]
+   ["2019-01"                          true]
+   ["2019"                             true]
+   ["20190120"                         true]
+   ["2019-13-45"                       true]
+   ["2019-00-00"                       true]
+   ["+2019-01-20"                      true]
+   ["2019-01-20T"                      true]
+   ["2019-01-20 01:00:00"              true]
+   ["2019-01-20T01:00:00.000-05:00"    true]
+   ["2019-01-20T25:00:00Z"             false]
+   ["2019-01-20T01:99:00Z"             false]
+   ["2019-01-20T01:00:99Z"             false]
+   ["2019-01-20T23:59:60Z"             false]
+   ["2019-13-45T01:00:00Z"             false]
+   ["T01:00:00Z"                       false]
+   ["now"                              false]
+   ["hello"                            false]
+   [""                                 false]])
+
+(deftest datetime-matches-concertos-envelope
+  (let [schema (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
+        sample (inst/json->edn (fx/sample "promissory-note"))]
+    (doseq [[value concerto-says] datetime-envelope]
+      (testing (str (pr-str value) " -- concerto validate says "
+                    (if concerto-says "valid" "invalid"))
+        (is (= concerto-says (m/validate schema (assoc sample :date value))))))))
+
+(deftest datetime-is-checked-on-the-wire-form
+  (testing "an earlier version accepted any string, so these passed while
+           Concerto rejected them"
+    (let [schema (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
+          sample (inst/json->edn (fx/sample "promissory-note"))]
+      (is (= {:date ["should be a date-time"]}
+             (me/humanize (m/explain schema (assoc sample :date "hello")))))
+      (is (= {:date ["should be a date-time"]}
+             (me/humanize (m/explain schema (assoc sample :date "")))))))
+
+  (testing "platform date objects are no longer accepted: they have no
+           JavaScript counterpart, so admitting them would make the JVM build
+           accept documents a ClojureScript build must reject"
+    (let [schema (cm/->schema (fx/registry "promissory-note") fx/note-fqn)
+          sample (inst/json->edn (fx/sample "promissory-note"))]
+      (is (not (m/validate schema (assoc sample :date #?(:clj  (java.time.Instant/now)
+                                                         :cljs (js/Date.)))))))))
