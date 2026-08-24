@@ -167,6 +167,33 @@ The core tests run from checked-in metamodel fixtures under `test-resources/`
 and need neither Node nor network; the CTO tests skip themselves when the CLI
 is absent. A fresh clone tests green on a machine that has never seen npm.
 
+## Metamodel versions
+
+Concerto's metamodel is itself versioned. This library dispatches on the short
+type name (`StringProperty`) rather than the full versioned `$class`
+(`concerto.metamodel@1.0.0.StringProperty`), and asserts on load that every
+version it sees is one it has been checked against:
+
+```clojure
+com.trustblocks.concerto.metamodel/supported-metamodel-versions  ;; => #{"1.0.0"}
+```
+
+An unrecognised version throws. That is deliberate, and it is the one failure
+mode worth being loud about: with version-pinned matching, a metamodel bump
+makes every `$class` match miss, so every property falls through to a
+permissive default and TypeIdentifiers go unqualified — which drops inherited
+properties along with the supertype. The resulting schema compiles cleanly,
+exports valid EDN, and accepts the sample it was built from, while also
+accepting everything else. A validator that silently stops validating is worse
+than no validator.
+
+Vetting a new metamodel version means adding it to that set; nothing else in
+the library should need to change, and there is a test that holds the line.
+
+For the same reason there is no permissive fallback for unhandled property
+kinds. A property kind this library does not understand raises an error naming
+the property rather than compiling to something that accepts any value.
+
 ## Status
 
 Early. Verified against all 57 templates in the Accord
@@ -184,6 +211,9 @@ roughly the order these matter:
 - `defaultValue` is ignored
 - `ScalarDeclaration` and `MapDeclaration` are not handled
 - `$timestamp` never appears in a schema
+
+These are gaps in coverage, not silent ones: an unhandled property kind or an
+unknown metamodel version raises rather than degrading.
 
 Do not rely on it as a substitute for Concerto validation until those close.
 

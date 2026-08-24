@@ -21,6 +21,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The only namespace that does I/O or needs Node.
 - `script/cto2edn.clj` — a babashka script covering all of the above.
 
+### Changed
+
+- Metamodel `$class` matching is version-independent — dispatch is on the short
+  type name, so a metamodel bump no longer silently blinds every match.
+- `com.trustblocks.concerto.metamodel/registry` asserts that every metamodel
+  version it sees is in `supported-metamodel-versions`, and throws otherwise.
+  Previously an unknown version degraded silently: every property compiled to
+  `:any`, inherited properties vanished with the unqualified supertypes, and
+  the schema still compiled and still accepted anything.
+- An unhandled property kind now raises instead of compiling to `:any`. The
+  permissive default never fired on any of the 57 templates in the
+  cicero-template-library, so it could only ever have masked a real gap.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

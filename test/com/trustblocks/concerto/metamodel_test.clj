@@ -99,3 +99,58 @@
   (let [reg (fx/registry "promissory-note")]
     (testing "TemplateModel declares none; Clause does"
       (is (= "clauseId" (mm/identity-field reg fx/note-fqn))))))
+
+;; ------------------------------------------------------------------ versions
+
+(deftest metamodel-class-parsing
+  (testing "the version is stripped, leaving the short type name to dispatch on"
+    (is (= "StringProperty" (mm/metamodel-type "concerto.metamodel@1.0.0.StringProperty")))
+    (is (= "1.0.0"          (mm/metamodel-version "concerto.metamodel@1.0.0.StringProperty")))
+    (is (= "TypeIdentifier" (mm/metamodel-type "concerto.metamodel@2.3.4.TypeIdentifier")))
+    (is (= "2.3.4"          (mm/metamodel-version "concerto.metamodel@2.3.4.TypeIdentifier"))))
+
+  (testing "a class from an ordinary model is not a metamodel type"
+    (is (nil? (mm/metamodel-type "org.accordproject.money@0.3.0.MonetaryAmount")))
+    (is (nil? (mm/metamodel-version "org.accordproject.money@0.3.0.MonetaryAmount"))))
+
+  (testing "and nothing blows up on absent or non-string input"
+    (is (nil? (mm/metamodel-type nil)))
+    (is (nil? (mm/metamodel-type :not-a-string)))
+    (is (nil? (mm/metamodel-type "")))))
+
+(deftest metamodel-versions-are-collected-recursively
+  (is (= #{"1.0.0"} (mm/metamodel-versions (fx/model "promissory-note" "model.json"))))
+  (is (= #{"1.0.0" "9.9.9"}
+         (mm/metamodel-versions
+          {:$class "concerto.metamodel@1.0.0.Model"
+           :declarations [{:$class "concerto.metamodel@9.9.9.ConceptDeclaration"}]})))
+  (is (= #{} (mm/metamodel-versions {:$class "some.other@1.0.0.Thing"}))))
+
+(deftest unsupported-metamodel-version-is-refused
+  (testing "the version we are checked against passes"
+    (is (some? (mm/check-metamodel-version! (fx/model "promissory-note" "model.json")))))
+
+  (testing "an unknown one throws rather than degrading silently.
+
+           Without this, every $class match misses, every property falls
+           through to a permissive default, TypeIdentifiers go unqualified so
+           inherited properties vanish -- and the resulting schema compiles
+           clean and accepts anything."
+    (let [bumped (first (fx/models-at-metamodel-version "promissory-note" "2.0.0"))]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Unsupported Concerto metamodel version 2\.0\.0"
+                            (mm/check-metamodel-version! bumped)))
+
+      (testing "and the registry refuses too, so nothing downstream sees it"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Unsupported Concerto metamodel version"
+                              (mm/registry [bumped])))))))
+
+(deftest a-vetted-new-version-needs-no-other-change
+  (testing "dispatch is on the short name, so adding a version to the supported
+           set is the only edit a metamodel bump requires"
+    (with-redefs [mm/supported-metamodel-versions #{"1.0.0" "2.0.0"}]
+      (let [bumped (mm/registry (fx/models-at-metamodel-version "promissory-note" "2.0.0"))]
+        (testing "imports still resolve and supertypes still qualify"
+          (is (= (mm/super-chain (fx/registry "promissory-note") fx/note-fqn)
+                 (mm/super-chain bumped fx/note-fqn))))))))

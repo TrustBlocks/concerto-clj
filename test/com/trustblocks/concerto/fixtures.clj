@@ -6,6 +6,7 @@
   test."
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [com.trustblocks.concerto.metamodel :as mm]))
 
 (def models
@@ -40,6 +41,20 @@
 
 (defn sample [template]
   (raw template "sample.json"))
+
+(defn models-at-metamodel-version
+  "The template's models with every metamodel `$class` retagged to `version`.
+
+  Stands in for Accord shipping a new metamodel: the models are unchanged, only
+  the version they are expressed in moves."
+  [template version]
+  (for [f (models template)]
+    (-> (io/resource (str "fixtures/" template "/" f))
+        slurp
+        (str/replace "concerto.metamodel@1.0.0" (str "concerto.metamodel@" version))
+        json/parse-string
+        mm/json->edn
+        mm/strip-locations)))
 
 (def acceptance-fqn "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel")
 (def note-fqn       "org.accordproject.promissorynote@0.2.0.TemplateModel")

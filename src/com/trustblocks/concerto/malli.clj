@@ -24,15 +24,15 @@
   rather than inline. That keeps `m/form` output pure EDN that reads back, and
   it keeps a schema dump legible: `:concerto/date-time` says what it is, an
   inline `[:fn #object[...]]` says nothing and round-trips through nothing."
-  {"concerto.metamodel@1.0.0.StringProperty"   :string
-   "concerto.metamodel@1.0.0.BooleanProperty"  :boolean
-   "concerto.metamodel@1.0.0.DoubleProperty"   :concerto/double
-   "concerto.metamodel@1.0.0.IntegerProperty"  :int
+  {"StringProperty"   :string
+   "BooleanProperty"  :boolean
+   "DoubleProperty"   :concerto/double
+   "IntegerProperty"  :int
    ;; Long is 64-bit in the spec but only 2^53-safe in Concerto's JS runtime.
    ;; On the JVM it is a true java.lang.Long, so precision is only at risk when
    ;; a value crosses the JS boundary.
-   "concerto.metamodel@1.0.0.LongProperty"     :int
-   "concerto.metamodel@1.0.0.DateTimeProperty" :concerto/date-time})
+   "LongProperty"     :int
+   "DateTimeProperty" :concerto/date-time})
 
 (def date-time
   "Concerto DateTime accepts an ISO-8601 string or an already-parsed instant."
@@ -62,21 +62,35 @@
           :concerto/double    double-like}))
 
 (defn- enum? [reg fqn]
-  (= "concerto.metamodel@1.0.0.EnumDeclaration"
-     (get-in reg [fqn :declaration :$class])))
+  (= "EnumDeclaration" (mm/metamodel-type (get-in reg [fqn :declaration :$class]))))
 
 (defn- enum-values [reg fqn]
   (into [:enum] (map :name) (get-in reg [fqn :declaration :properties])))
 
 (defn- property->schema [reg prop]
-  (let [base (or (scalar (:$class prop))
-                 (when (= "concerto.metamodel@1.0.0.ObjectProperty" (:$class prop))
+  (let [kind (mm/metamodel-type (:$class prop))
+        base (or (scalar kind)
+                 (case kind
+                   "ObjectProperty"
                    (let [fqn (mm/type-fqn (:type prop))]
-                     (if (enum? reg fqn) (enum-values reg fqn) :map)))
-                 ;; relationships store the referenced identifier
-                 (when (= "concerto.metamodel@1.0.0.RelationshipProperty" (:$class prop))
-                   :string)
-                 :any)]
+                     (if (enum? reg fqn) (enum-values reg fqn) :map))
+                   ;; relationships store the referenced identifier
+                   "RelationshipProperty" :string
+                   nil))]
+    ;; No permissive default. An unrecognised property kind used to compile to
+    ;; :any, which accepts anything -- so a model this library does not fully
+    ;; understand would validate clean and the gap would never surface. Since
+    ;; the point of this library is to flag a bad model rather than wave it
+    ;; through, say so instead.
+    (when-not base
+      (throw (ex-info (str "Cannot compile property " (pr-str (:name prop))
+                           " of kind " (pr-str (:$class prop))
+                           ". This library does not handle that property kind "
+                           "yet, and refuses to emit a schema that would accept "
+                           "any value for it.")
+                      {:property (:name prop)
+                       :$class   (:$class prop)
+                       :kind     kind})))
     (cond-> base
       (:isArray prop) (->> (conj [:sequential])))))
 

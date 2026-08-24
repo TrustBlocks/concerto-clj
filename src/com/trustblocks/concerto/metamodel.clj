@@ -11,9 +11,70 @@
   Every key in the metamodel is a legal Clojure keyword name, so JSON -> EDN is
   lossless and needs no mapping table. Values -- `$class` strings, type names,
   namespaces -- stay strings, because they are data, not structure."
-  (:require [clojure.walk :as walk]))
+  (:require [clojure.string :as str]
+            [clojure.walk :as walk]))
 
-(def ^:private type-identifier "concerto.metamodel@1.0.0.TypeIdentifier")
+;; ---------------------------------------------------------------- versions
+
+(def supported-metamodel-versions
+  "Metamodel versions this library has been checked against."
+  #{"1.0.0"})
+
+(def ^:private metamodel-class
+  ;; Greedy on the version so the final dotted segment is the type name:
+  ;; "concerto.metamodel@1.0.0.StringProperty" -> "1.0.0", "StringProperty".
+  #"^concerto\.metamodel@(.+)\.([A-Za-z][A-Za-z0-9_]*)$")
+
+(defn metamodel-type
+  "Short type name of a metamodel `$class`, ignoring its version, or nil when
+  the `$class` does not belong to the metamodel at all.
+
+  Dispatching on the short name rather than the full versioned string is what
+  keeps a metamodel bump from silently blinding every match in this library."
+  [$class]
+  (when (string? $class)
+    (some-> (re-matches metamodel-class $class) (nth 2))))
+
+(defn metamodel-version
+  "Metamodel version a `$class` refers to, or nil if it is not a metamodel type."
+  [$class]
+  (when (string? $class)
+    (some-> (re-matches metamodel-class $class) (nth 1))))
+
+(defn metamodel-versions
+  "Every metamodel version referenced anywhere in `x`."
+  [x]
+  (cond
+    (map? x)    (into (if-let [v (metamodel-version (:$class x))] #{v} #{})
+                      (mapcat metamodel-versions)
+                      (vals x))
+    (vector? x) (into #{} (mapcat metamodel-versions) x)
+    :else       #{}))
+
+(defn check-metamodel-version!
+  "Return `model`, or throw if it uses a metamodel version we do not know.
+
+  An unnoticed metamodel bump is the worst failure available to this library.
+  Every `$class` match would miss, so every property would fall through to a
+  permissive default; TypeIdentifiers would go unqualified, so supertypes would
+  not resolve and inherited properties would vanish. The schema would still
+  compile, still export clean EDN, and still accept the sample it was built
+  from -- while accepting everything else too. A validator that silently stops
+  validating is worse than no validator, so stop instead."
+  [model]
+  (let [found (metamodel-versions model)
+        bad   (remove supported-metamodel-versions found)]
+    (when (seq bad)
+      (throw (ex-info (str "Unsupported Concerto metamodel version "
+                           (str/join ", " (sort bad))
+                           ". This library is checked against "
+                           (str/join ", " (sort supported-metamodel-versions))
+                           ". Refusing to compile a schema that would silently "
+                           "accept anything.")
+                      {:found     (sort found)
+                       :supported (sort supported-metamodel-versions)
+                       :namespace (:namespace model)})))
+    model))
 
 ;; ---------------------------------------------------------------- json -> edn
 
@@ -43,9 +104,9 @@
     (merge
      (into {}
            (for [i  (:imports model)
-                 nm (case (:$class i)
-                      "concerto.metamodel@1.0.0.ImportType"  [(:name i)]
-                      "concerto.metamodel@1.0.0.ImportTypes" (:types i)
+                 nm (case (metamodel-type (:$class i))
+                      "ImportType"  [(:name i)]
+                      "ImportTypes" (:types i)
                       [])]
              [nm (:namespace i)]))
      (into {} (for [d (:declarations model)] [(:name d) ns-])))))
@@ -71,7 +132,7 @@
   (cond
     (map? x)
     (let [m (update-vals x #(qualify-types ns-for %))]
-      (if (and (= type-identifier (:$class m))
+      (if (and (= "TypeIdentifier" (metamodel-type (:$class m)))
                (not (contains? m :namespace)))
         (if-let [ns- (ns-for (:name m))]
           (assoc m :namespace ns-)
@@ -111,6 +172,7 @@
   import context needed to interpret it."
   [models]
   (reduce (fn [acc model]
+            (check-metamodel-version! model)
             (let [ns-for (namespace-index model)]
               (reduce (fn [acc {:keys [fqn declaration]}]
                         (assoc acc fqn {:declaration (qualify-types ns-for declaration)

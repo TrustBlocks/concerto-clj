@@ -5,6 +5,7 @@
             [com.trustblocks.concerto.fixtures :as fx]
             [com.trustblocks.concerto.instance :as inst]
             [com.trustblocks.concerto.malli :as cm]
+            [com.trustblocks.concerto.metamodel :as mm]
             [malli.core :as m]
             [malli.error :as me]))
 
@@ -120,3 +121,25 @@
 (deftest unknown-class-is-an-error-not-a-nil
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown \$class"
                         (cm/->schema (fx/registry "promissory-note") "no.such@1.0.0.Thing"))))
+
+;; ------------------------------------------------------------------ versions
+
+(deftest schema-is-identical-across-metamodel-versions
+  (testing "a vetted metamodel bump changes nothing about the compiled schema"
+    (with-redefs [mm/supported-metamodel-versions #{"1.0.0" "2.0.0"}]
+      (is (= (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
+             (cm/->edn (mm/registry (fx/models-at-metamodel-version "promissory-note" "2.0.0"))
+                       fx/note-fqn))))))
+
+(deftest unhandled-property-kinds-are-refused
+  (testing "an unrecognised property kind used to compile to :any, which accepts
+           anything -- so a model this library does not fully understand would
+           validate clean and the gap would never surface"
+    (let [reg {"x@1.0.0.T"
+               {:declaration {:$class     "concerto.metamodel@1.0.0.ConceptDeclaration"
+                              :name       "T"
+                              :properties [{:$class "concerto.metamodel@1.0.0.QuantumProperty"
+                                            :name   "spooky"}]}}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Cannot compile property \"spooky\""
+                            (cm/->schema reg "x@1.0.0.T"))))))
