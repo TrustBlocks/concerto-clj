@@ -2,6 +2,7 @@
 
  :deps {org.clojure/clojure {:mvn/version "1.12.5"}
         metosin/malli       {:mvn/version "0.20.1"}
+        instaparse/instaparse {:mvn/version "1.5.0"}
         ;; Both ship inside babashka; declared here for JVM use.
         cheshire/cheshire   {:mvn/version "6.2.0"}
         babashka/process    {:mvn/version "0.6.25"}}

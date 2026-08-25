@@ -29,25 +29,55 @@
     (when (and resolved (.canExecute (io/file resolved)))
       resolved)))
 
-(defn parse
-  "Parse one .cto file to metamodel EDN, with source locations stripped."
-  [cto-path & {:keys [cli] :as opts}]
-  (let [f   (io/file cto-path)
-        bin (find-cli opts)]
-    (when-not (.exists f)
-      (throw (ex-info "CTO file not found" {:path (str f)})))
+(defn- clojure-parse
+  "The pure-Clojure parser, resolved on demand.
+
+  Not required at the top of this namespace on purpose: instaparse uses
+  `deftype` with `clojure.lang.IHashEq`, which babashka's interpreter cannot
+  provide, so loading it eagerly would break every bb script that uses the CLI
+  path perfectly well."
+  [src]
+  ((requiring-resolve 'com.trustblocks.concerto.parser/parse-string) src))
+
+(defn- parse-with-cli [f opts]
+  (let [bin (find-cli opts)]
     (when-not bin
       (throw (ex-info (str "concerto CLI not found. Install it with "
-                           "`npm i -g @accordproject/concerto-cli`, or set "
-                           "$CONCERTO_CLI to its path.")
-                      {:tried (or cli (System/getenv "CONCERTO_CLI") "concerto")})))
-    (let [{:keys [exit out err]} (p/sh bin "parse" "--model" (.getPath f))]
+                           "`npm i -g @accordproject/concerto-cli`, set "
+                           "$CONCERTO_CLI to its path, or pass "
+                           ":parser :clojure to use the Clojure grammar.")
+                      {:tried (or (:cli opts) (System/getenv "CONCERTO_CLI") "concerto")})))
+    (let [{:keys [exit out err]} (p/sh bin "parse" "--model" (.getPath ^java.io.File f))]
       (when-not (zero? exit)
         (throw (ex-info "concerto parse failed"
-                        {:path (.getPath f) :exit exit :err err})))
-      (-> (json/parse-string out)
-          mm/json->edn
-          mm/strip-locations))))
+                        {:path (.getPath ^java.io.File f) :exit exit :err err})))
+      (-> (json/parse-string out) mm/json->edn mm/strip-locations))))
+
+(defn parse
+  "Parse one .cto file to metamodel EDN, with source locations stripped.
+
+  `:parser` chooses how:
+
+    :cli      (default) shell out to Accord's CLI. Works on the JVM and under
+              babashka, and needs Node.
+
+    :clojure  the instaparse grammar in `concerto.parser`. Needs no Node and
+              works in ClojureScript, but does *not* work under babashka --
+              instaparse uses `deftype` with `clojure.lang.IHashEq`, which
+              babashka's interpreter cannot provide.
+
+  The two agree: `parse-string` is byte-identical to `concerto parse` across all
+  237 models in the cicero-template-library. The CLI remains the default because
+  it is the reference implementation and because it runs everywhere this
+  namespace does."
+  [cto-path & {:keys [parser] :or {parser :cli} :as opts}]
+  (let [f (io/file cto-path)]
+    (when-not (.exists f)
+      (throw (ex-info "CTO file not found" {:path (str f)})))
+    (case parser
+      :clojure (clojure-parse (slurp f))
+      :cli     (parse-with-cli f opts)
+      (throw (ex-info "Unknown :parser" {:parser parser :known [:cli :clojure]})))))
 
 (defn model-files
   "Every .cto under a directory. An Accord template vendors its imports
@@ -60,7 +90,9 @@
        vec))
 
 (defn load-registry
-  "Parse a .cto file or a directory of them into a declaration registry."
+  "Parse a .cto file or a directory of them into a declaration registry.
+
+  Takes the same `:parser` option as `parse`."
   [path & {:as opts}]
   (let [f (io/file path)]
     (->> (if (.isDirectory f) (model-files f) [f])

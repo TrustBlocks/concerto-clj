@@ -1,2 +1,3 @@
 {:paths ["src" "script" "test" "test-resources"]
- :deps  {metosin/malli {:mvn/version "0.20.1"}}}
+ :deps  {metosin/malli         {:mvn/version "0.20.1"}
+         instaparse/instaparse {:mvn/version "1.5.0"}}}

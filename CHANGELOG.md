@@ -91,6 +91,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Compiling a schema for an enum or scalar declaration directly no longer tries
   to compile it as a map.
 
+### Added
+
+- `com.trustblocks.concerto.grammar` and `com.trustblocks.concerto.parser` — the
+  CTO grammar as instaparse, and the transform to metamodel EDN. `cto/parse`
+  takes `:parser :clojure` to use it instead of shelling out to Node.
+- `script/differential.clj` compares the two parsers over a tree of .cto files.
+  All 237 models in the cicero-template-library parse byte-identically.
+
+### Known limitations
+
+- The Clojure parser does not run under babashka: instaparse uses `deftype` with
+  `clojure.lang.IHashEq`, which SCI cannot provide. It does run in
+  ClojureScript, where there is no CLI to fall back to.
+
 ### Known gaps
 
 The compiled schema is currently weaker than Concerto's own validator. See the

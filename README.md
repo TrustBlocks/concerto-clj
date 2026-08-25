@@ -250,22 +250,56 @@ undeclared key      false   false      false
 
 ## Parsing CTO text
 
-`com.trustblocks.concerto.cto` shells out to Accord's CLI:
+Two ways, and they agree:
+
+```clojure
+(cto/parse "model.cto")                    ; Accord's CLI     (default)
+(cto/parse "model.cto" :parser :clojure)   ; instaparse, no Node
+```
+
+`com.trustblocks.concerto.parser` is the CTO grammar in Clojure —
+`concerto.grammar` is about 95 lines of instaparse against Accord's 1816-line
+PEG.js. Most of that difference is structural rather than clever: roughly 150 of
+the 239 original rules are a lexical layer borrowed from PEG.js's JavaScript
+grammar — identifier classes, string escapes, hex literals, URI and semver
+components — which collapse into regexes, and instaparse's `:auto-whitespace`
+removes the `__` threaded through every production.
+
+**It is checked against the CLI, not against itself.** `script/differential.clj`
+parses every model in the
+[cicero-template-library](https://github.com/accordproject/cicero-template-library)
+both ways and compares:
+
+```console
+$ clojure -M script/differential.clj
+237 files: 237 identical, 0 differ, 0 errored
+```
+
+The CLI stays the default because it is the reference implementation, and
+because of one platform gap:
+
+| | CLI parser | Clojure parser |
+|---|---|---|
+| JVM | yes | yes |
+| ClojureScript | no | **yes** |
+| babashka | yes | **no** |
+
+instaparse uses `deftype` with `clojure.lang.IHashEq`, which babashka's
+interpreter cannot provide, so bb scripts still need Node. In the browser the
+position reverses: there is no CLI to shell out to, and the Clojure parser is
+the only option — CTO text to validated instance with no Accord toolchain
+present at all.
+
+`concerto.parser` is resolved lazily by `concerto.cto`, so requiring the latter
+does not drag instaparse in and break babashka.
+
+To install the CLI:
 
 ```
 npm i -g @accordproject/concerto-cli
 ```
 
-or set `$CONCERTO_CLI` to its path. This is the only part that needs Node, and
-it is isolated on purpose — anything that can produce metamodel JSON can feed
-the rest.
-
-A pure-Clojure parser is possible later: the grammar is a PEG
-(`concerto-cto/lib/parser.pegjs`, roughly 1200 real lines once comments and
-Unicode character classes are set aside) and would port to instaparse. It is
-deferred because the grammar is normative and drifts, so reimplementing it is a
-standing obligation to track that drift, while the metamodel is a stable
-contract.
+or set `$CONCERTO_CLI` to its path.
 
 ## Development
 

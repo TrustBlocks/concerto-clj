@@ -71,3 +71,11 @@ jobs:
 
       - run: npm i -g @accordproject/concerto-cli
       - run: clojure -M:test
+
+      # The Clojure CTO parser is checked against the CLI, not against itself.
+      # Clone the template library and compare every model both ways -- this is
+      # what would catch the grammar drifting away from the reference.
+      - name: differential parser check
+        run: |
+          git clone --depth 1 https://github.com/accordproject/cicero-template-library.git /tmp/ctl
+          clojure -M script/differential.clj /tmp/ctl/src
