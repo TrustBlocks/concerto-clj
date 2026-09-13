@@ -127,6 +127,19 @@ their own constraints applied:
 [:country [:and :string [:re "^[A-Z]{2}$"]]]   ; scalar CountryCode
 ```
 
+Concerto 4.1's `size=[min,max]` on an array or map property (`sizeValidator`
+in the metamodel) compiles to `:min`/`:max` on the collection itself, not on
+its elements -- it constrains how many items there are, not their shape:
+
+```clojure
+[:tags [:sequential {:min 2 :max 5} :string]]
+```
+
+`concerto parse` does not check that `minSize <= maxSize`, or that a size
+validator only appears on an array or map property -- that is Concerto's
+`ModelManager`, a layer this library never calls. Both are checked here
+instead, at schema-compile time.
+
 Patterns are emitted as strings rather than compiled patterns, because `#"..."`
 is a Clojure reader literal and not EDN — a compiled pattern would break the
 round-trip the rest of the schema guarantees.

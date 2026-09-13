@@ -465,6 +465,78 @@
         (is (not (ok? {:drate 1.5})))
         (is (ok? {:drate 1.0}))))))
 
+;; ------------------------------------------------------------- collection size
+
+(def ^:private with-size
+  (mm/registry
+   [{:$class    (mmc "Model")
+     :namespace "sz@1.0.0"
+     :imports   []
+     :declarations
+     [(decl "ConceptDeclaration" "Basket"
+            :props
+            [(assoc (prop "StringProperty" "bounded" :array true)
+                    :sizeValidator {:$class (mmc "CollectionSizeValidator")
+                                    :minSize 2 :maxSize 5})
+             (assoc (prop "StringProperty" "minonly" :array true)
+                    :sizeValidator {:$class (mmc "CollectionSizeValidator") :minSize 2})
+             (assoc (prop "StringProperty" "maxonly" :array true)
+                    :sizeValidator {:$class (mmc "CollectionSizeValidator") :maxSize 3})])]}]))
+
+(deftest collection-size-is-enforced
+  (testing "each verdict below matches the equivalent scenario in
+           accordproject/concerto-conformance's validate/models/collection_size"
+    (let [schema (cm/->schema with-size "sz@1.0.0.Basket")
+          ok?    #(m/validate schema (merge {:$class "sz@1.0.0.Basket"
+                                             :bounded ["a" "b"]
+                                             :minonly ["a" "b"]
+                                             :maxonly []}
+                                            %))]
+      (testing "within bounds, including both edges"
+        (is (ok? {}))
+        (is (ok? {:bounded ["a" "b" "c" "d" "e"]})) ; at max
+        (is (ok? {:bounded ["a" "b"]})))            ; at min
+
+      (testing "outside bounds"
+        (is (not (ok? {:bounded ["a"]})))
+        (is (not (ok? {:bounded ["a" "b" "c" "d" "e" "f"]}))))
+
+      (testing "a one-sided bound leaves the other end open"
+        (is (not (ok? {:minonly ["a"]})))
+        (is (ok? {:minonly (vec (repeat 50 "a"))}))
+        (is (ok? {:maxonly []}))
+        (is (not (ok? {:maxonly ["a" "b" "c" "d"]})))))))
+
+(deftest collection-size-validator-rejects-what-concerto-rejects
+  (testing "both checks below are enforced by Concerto's ModelManager at
+           model-load time, not by the CTO parser `concerto.cto` shells out to --
+           `concerto parse` accepts a size=[10,5] property, and a size validator
+           on a non-array property, without complaint. Sourced from
+           concerto-conformance's semantic/features/collections.feature."
+    (testing "minSize > maxSize"
+      (let [bad (mm/registry
+                 [{:$class (mmc "Model") :namespace "szbad@1.0.0" :imports []
+                   :declarations
+                   [(decl "ConceptDeclaration" "Basket"
+                          :props [(assoc (prop "StringProperty" "items" :array true)
+                                         :sizeValidator {:$class  (mmc "CollectionSizeValidator")
+                                                         :minSize 10 :maxSize 5})])]}])]
+        (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                              #"minSize must be less than or equal to maxSize"
+                              (cm/->schema bad "szbad@1.0.0.Basket")))))
+
+    (testing "size validator on a non-collection property"
+      (let [bad (mm/registry
+                 [{:$class (mmc "Model") :namespace "szbad2@1.0.0" :imports []
+                   :declarations
+                   [(decl "ConceptDeclaration" "Thing"
+                          :props [(assoc (prop "StringProperty" "label")
+                                         :sizeValidator {:$class  (mmc "CollectionSizeValidator")
+                                                         :minSize 1 :maxSize 5})])]}])]
+        (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                              #"size validator can only be applied to array or map properties"
+                              (cm/->schema bad "szbad2@1.0.0.Thing")))))))
+
 (deftest scalars-inline-as-their-primitive
   (testing "a scalar is a value, not a tagged object. Compiling it as a concept
            produced a closed map with only $class, which rejected the plain

@@ -195,6 +195,34 @@
              (some? minLength) (assoc :min minLength)
              (some? maxLength) (assoc :max maxLength))])
 
+(defn- size-schema
+  "Malli `:sequential` properties (`:min`/`:max`) for a `sizeValidator` node.
+
+  Unlike `length-schema` and `domain-schemas`, this does not go through
+  `validator-schemas`/`constrained`: those apply to *each element*, and a size
+  validator constrains the collection itself, so it has to be applied after
+  `:sequential` wraps the element schema rather than before.
+
+  Both checks below are enforced by Concerto's `ModelManager` when a model is
+  loaded, not by the CTO parser `concerto.cto` shells out to -- `concerto
+  parse` accepts `size=[10,5]`, and accepts a size validator on a
+  non-collection property, without complaint. Nothing upstream of this
+  compiler catches either, so both are checked here, against the exact
+  wording `concerto-conformance`'s semantic suite expects."
+  [{:keys [minSize maxSize] :as sv} prop]
+  (when-not (:isArray prop)
+    (throw (ex-info (str "size validator can only be applied to array or map "
+                         "properties. Property " (pr-str (:name prop)) " is neither.")
+                    {:property (:name prop) :sizeValidator sv})))
+  (when (and (some? minSize) (some? maxSize) (< maxSize minSize))
+    (throw (ex-info (str "minSize must be less than or equal to maxSize"
+                         " (property " (pr-str (:name prop))
+                         ", minSize " minSize ", maxSize " maxSize ")")
+                    {:property (:name prop) :minSize minSize :maxSize maxSize})))
+  (cond-> {}
+    (some? minSize) (assoc :min minSize)
+    (some? maxSize) (assoc :max maxSize)))
+
 (defn- validator-schemas
   "Extra schemas contributed by one validator node, or nil."
   [validator]
@@ -301,8 +329,13 @@
                        :$class   (:$class prop)
                        :kind     kind})))
     ;; Constraints apply to each element, so they go on before :sequential.
+    ;; A size validator constrains the collection itself, so it goes on after --
+    ;; and its own checks (array-or-map-only, minSize <= maxSize) fire here
+    ;; whether or not :isArray is true, since a size validator on a
+    ;; non-collection property is exactly the case it has to reject.
     (cond-> (constrained base prop)
-      (:isArray prop) (->> (conj [:sequential])))))
+      (:isArray prop)       (->> (conj [:sequential]))
+      (:sizeValidator prop) (mu/update-properties merge (size-schema (:sizeValidator prop) prop)))))
 
 (defn- ordered
   "Entries deduplicated by key, keeping the first position and the last value.

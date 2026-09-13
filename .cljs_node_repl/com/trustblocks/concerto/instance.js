@@ -24,14 +24,14 @@ return new cljs.core.Keyword(null,"$class","$class",1168854512).cljs$core$IFn$_i
  */
 com.trustblocks.concerto.instance.identifier_of = (function com$trustblocks$concerto$instance$identifier_of(var_args){
 var args__5755__auto__ = [];
-var len__5749__auto___8691 = arguments.length;
-var i__5750__auto___8692 = (0);
+var len__5749__auto___571 = arguments.length;
+var i__5750__auto___572 = (0);
 while(true){
-if((i__5750__auto___8692 < len__5749__auto___8691)){
-args__5755__auto__.push((arguments[i__5750__auto___8692]));
+if((i__5750__auto___572 < len__5749__auto___571)){
+args__5755__auto__.push((arguments[i__5750__auto___572]));
 
-var G__8693 = (i__5750__auto___8692 + (1));
-i__5750__auto___8692 = G__8693;
+var G__573 = (i__5750__auto___572 + (1));
+i__5750__auto___572 = G__573;
 continue;
 } else {
 }
@@ -42,10 +42,10 @@ var argseq__5756__auto__ = ((((1) < args__5755__auto__.length))?(new cljs.core.I
 return com.trustblocks.concerto.instance.identifier_of.cljs$core$IFn$_invoke$arity$variadic((arguments[(0)]),argseq__5756__auto__);
 });
 
-(com.trustblocks.concerto.instance.identifier_of.cljs$core$IFn$_invoke$arity$variadic = (function (instance,p__8689){
-var map__8690 = p__8689;
-var map__8690__$1 = cljs.core.__destructure_map.call(null,map__8690);
-var identity_field = cljs.core.get.call(null,map__8690__$1,new cljs.core.Keyword(null,"identity-field","identity-field",-1933775876));
+(com.trustblocks.concerto.instance.identifier_of.cljs$core$IFn$_invoke$arity$variadic = (function (instance,p__569){
+var map__570 = p__569;
+var map__570__$1 = cljs.core.__destructure_map.call(null,map__570);
+var identity_field = cljs.core.get.call(null,map__570__$1,new cljs.core.Keyword(null,"identity-field","identity-field",-1933775876));
 var or__5025__auto__ = new cljs.core.Keyword(null,"$identifier","$identifier",948568846).cljs$core$IFn$_invoke$arity$1(instance);
 if(cljs.core.truth_(or__5025__auto__)){
 return or__5025__auto__;
@@ -61,11 +61,11 @@ return null;
 (com.trustblocks.concerto.instance.identifier_of.cljs$lang$maxFixedArity = (1));
 
 /** @this {Function} */
-(com.trustblocks.concerto.instance.identifier_of.cljs$lang$applyTo = (function (seq8687){
-var G__8688 = cljs.core.first.call(null,seq8687);
-var seq8687__$1 = cljs.core.next.call(null,seq8687);
+(com.trustblocks.concerto.instance.identifier_of.cljs$lang$applyTo = (function (seq567){
+var G__568 = cljs.core.first.call(null,seq567);
+var seq567__$1 = cljs.core.next.call(null,seq567);
 var self__5734__auto__ = this;
-return self__5734__auto__.cljs$core$IFn$_invoke$arity$variadic(G__8688,seq8687__$1);
+return self__5734__auto__.cljs$core$IFn$_invoke$arity$variadic(G__568,seq567__$1);
 }));
 
 

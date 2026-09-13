@@ -16,13 +16,13 @@ com.trustblocks.concerto.parser.tag_EQ_ = (function com$trustblocks$concerto$par
 return ((cljs.core.vector_QMARK_.call(null,node)) && (cljs.core._EQ_.call(null,t,cljs.core.first.call(null,node))));
 });
 com.trustblocks.concerto.parser.child = (function com$trustblocks$concerto$parser$child(tag,node){
-return cljs.core.first.call(null,cljs.core.filter.call(null,(function (p1__2572_SHARP_){
-return com.trustblocks.concerto.parser.tag_EQ_.call(null,tag,p1__2572_SHARP_);
+return cljs.core.first.call(null,cljs.core.filter.call(null,(function (p1__6749_SHARP_){
+return com.trustblocks.concerto.parser.tag_EQ_.call(null,tag,p1__6749_SHARP_);
 }),cljs.core.rest.call(null,node)));
 });
 com.trustblocks.concerto.parser.children = (function com$trustblocks$concerto$parser$children(tag,node){
-return cljs.core.filterv.call(null,(function (p1__2573_SHARP_){
-return com.trustblocks.concerto.parser.tag_EQ_.call(null,tag,p1__2573_SHARP_);
+return cljs.core.filterv.call(null,(function (p1__6750_SHARP_){
+return com.trustblocks.concerto.parser.tag_EQ_.call(null,tag,p1__6750_SHARP_);
 }),cljs.core.rest.call(null,node));
 });
 com.trustblocks.concerto.parser.text = (function com$trustblocks$concerto$parser$text(node){
@@ -32,12 +32,12 @@ com.trustblocks.concerto.parser.ident_of = (function com$trustblocks$concerto$pa
 return com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"ident","ident",-742346),node));
 });
 com.trustblocks.concerto.parser.unquote_string = (function com$trustblocks$concerto$parser$unquote_string(s){
-return clojure.string.replace.call(null,cljs.core.subs.call(null,s,(1),(cljs.core.count.call(null,s) - (1))),/\\(.)/,(function (p__2574){
-var vec__2575 = p__2574;
-var _ = cljs.core.nth.call(null,vec__2575,(0),null);
-var c = cljs.core.nth.call(null,vec__2575,(1),null);
-var G__2578 = c;
-switch (G__2578) {
+return clojure.string.replace.call(null,cljs.core.subs.call(null,s,(1),(cljs.core.count.call(null,s) - (1))),/\\(.)/,(function (p__6751){
+var vec__6752 = p__6751;
+var _ = cljs.core.nth.call(null,vec__6752,(0),null);
+var c = cljs.core.nth.call(null,vec__6752,(1),null);
+var G__6755 = c;
+switch (G__6755) {
 case "n":
 return "\n";
 
@@ -111,11 +111,11 @@ return new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$c
 });
 com.trustblocks.concerto.parser.__GT_decorator = (function com$trustblocks$concerto$parser$__GT_decorator(node){
 var args = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"decorator-args","decorator-args",1708204090),node);
-var G__2580 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Decorator"].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node)], null);
+var G__6757 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Decorator"].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node)], null);
 if(cljs.core.truth_(args)){
-return cljs.core.assoc.call(null,G__2580,new cljs.core.Keyword(null,"arguments","arguments",-1182834456),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_decorator_argument,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"decorator-arg","decorator-arg",335382546),args)));
+return cljs.core.assoc.call(null,G__6757,new cljs.core.Keyword(null,"arguments","arguments",-1182834456),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_decorator_argument,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"decorator-arg","decorator-arg",335382546),args)));
 } else {
-return G__2580;
+return G__6757;
 }
 });
 com.trustblocks.concerto.parser.decorators_of = (function com$trustblocks$concerto$parser$decorators_of(node){
@@ -123,11 +123,11 @@ return cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_decorator,c
 });
 com.trustblocks.concerto.parser.with_decorators = (function com$trustblocks$concerto$parser$with_decorators(m,node){
 var ds = com.trustblocks.concerto.parser.decorators_of.call(null,node);
-var G__2581 = m;
+var G__6758 = m;
 if(cljs.core.seq.call(null,ds)){
-return cljs.core.assoc.call(null,G__2581,new cljs.core.Keyword(null,"decorators","decorators",350732878),ds);
+return cljs.core.assoc.call(null,G__6758,new cljs.core.Keyword(null,"decorators","decorators",350732878),ds);
 } else {
-return G__2581;
+return G__6758;
 }
 });
 com.trustblocks.concerto.parser.__GT_regex_validator = (function com$trustblocks$concerto$parser$__GT_regex_validator(node){
@@ -147,23 +147,23 @@ return null;
 com.trustblocks.concerto.parser.__GT_domain_validator = (function com$trustblocks$concerto$parser$__GT_domain_validator(node,type_name){
 var lower = com.trustblocks.concerto.parser.bound.call(null,new cljs.core.Keyword(null,"lower","lower",1120320821),node);
 var upper = com.trustblocks.concerto.parser.bound.call(null,new cljs.core.Keyword(null,"upper","upper",246243906),node);
-var G__2582 = new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.domain_validators.call(null,type_name,"IntegerDomainValidator"))].join('')], null);
-var G__2582__$1 = (((!((lower == null))))?cljs.core.assoc.call(null,G__2582,new cljs.core.Keyword(null,"lower","lower",1120320821),lower):G__2582);
+var G__6759 = new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.domain_validators.call(null,type_name,"IntegerDomainValidator"))].join('')], null);
+var G__6759__$1 = (((!((lower == null))))?cljs.core.assoc.call(null,G__6759,new cljs.core.Keyword(null,"lower","lower",1120320821),lower):G__6759);
 if((!((upper == null)))){
-return cljs.core.assoc.call(null,G__2582__$1,new cljs.core.Keyword(null,"upper","upper",246243906),upper);
+return cljs.core.assoc.call(null,G__6759__$1,new cljs.core.Keyword(null,"upper","upper",246243906),upper);
 } else {
-return G__2582__$1;
+return G__6759__$1;
 }
 });
 com.trustblocks.concerto.parser.__GT_length_validator = (function com$trustblocks$concerto$parser$__GT_length_validator(node){
 var minl = com.trustblocks.concerto.parser.bound.call(null,new cljs.core.Keyword(null,"min-len","min-len",-717560485),node);
 var maxl = com.trustblocks.concerto.parser.bound.call(null,new cljs.core.Keyword(null,"max-len","max-len",-18846016),node);
-var G__2583 = new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"StringLengthValidator"].join('')], null);
-var G__2583__$1 = (((!((minl == null))))?cljs.core.assoc.call(null,G__2583,new cljs.core.Keyword(null,"minLength","minLength",-1538722770),minl):G__2583);
+var G__6760 = new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"StringLengthValidator"].join('')], null);
+var G__6760__$1 = (((!((minl == null))))?cljs.core.assoc.call(null,G__6760,new cljs.core.Keyword(null,"minLength","minLength",-1538722770),minl):G__6760);
 if((!((maxl == null)))){
-return cljs.core.assoc.call(null,G__2583__$1,new cljs.core.Keyword(null,"maxLength","maxLength",-1633020073),maxl);
+return cljs.core.assoc.call(null,G__6760__$1,new cljs.core.Keyword(null,"maxLength","maxLength",-1633020073),maxl);
 } else {
-return G__2583__$1;
+return G__6760__$1;
 }
 });
 com.trustblocks.concerto.parser.__GT_field = (function com$trustblocks$concerto$parser$__GT_field(node){
@@ -176,19 +176,19 @@ var regex = (cljs.core.truth_(v)?com.trustblocks.concerto.parser.child.call(null
 var range_v = (cljs.core.truth_(v)?com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"range-validator","range-validator",-1057399604),v):null);
 var len = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"length-validator","length-validator",-1800526572),node);
 var d = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"default","default",-1987822328),node);
-var G__2584 = new cljs.core.PersistentArrayMap(null, 4, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1((function (){var or__5025__auto__ = primitive;
+var G__6761 = new cljs.core.PersistentArrayMap(null, 4, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1((function (){var or__5025__auto__ = primitive;
 if(cljs.core.truth_(or__5025__auto__)){
 return or__5025__auto__;
 } else {
 return "ObjectProperty";
 }
 })())].join(''),new cljs.core.Keyword(null,"name","name",1843675177),nm,new cljs.core.Keyword(null,"isArray","isArray",709761807),(!((com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"array","array",-2080713842),node) == null))),new cljs.core.Keyword(null,"isOptional","isOptional",-1412481319),(!((com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"optional","optional",2053951509),node) == null)))], null);
-var G__2584__$1 = (((primitive == null))?cljs.core.assoc.call(null,G__2584,new cljs.core.Keyword(null,"type","type",1174270348),com.trustblocks.concerto.parser.type_identifier.call(null,type_name)):G__2584);
-var G__2584__$2 = (cljs.core.truth_(d)?cljs.core.assoc.call(null,G__2584__$1,new cljs.core.Keyword(null,"defaultValue","defaultValue",-586131910),com.trustblocks.concerto.parser.literal_value.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"literal","literal",1664775605),d))):G__2584__$1);
-var G__2584__$3 = (cljs.core.truth_(regex)?cljs.core.assoc.call(null,G__2584__$2,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_regex_validator.call(null,regex)):G__2584__$2);
-var G__2584__$4 = (cljs.core.truth_(range_v)?cljs.core.assoc.call(null,G__2584__$3,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_domain_validator.call(null,range_v,type_name)):G__2584__$3);
-var G__2584__$5 = (cljs.core.truth_(len)?cljs.core.assoc.call(null,G__2584__$4,new cljs.core.Keyword(null,"lengthValidator","lengthValidator",-794930465),com.trustblocks.concerto.parser.__GT_length_validator.call(null,len)):G__2584__$4);
-return com.trustblocks.concerto.parser.with_decorators.call(null,G__2584__$5,node);
+var G__6761__$1 = (((primitive == null))?cljs.core.assoc.call(null,G__6761,new cljs.core.Keyword(null,"type","type",1174270348),com.trustblocks.concerto.parser.type_identifier.call(null,type_name)):G__6761);
+var G__6761__$2 = (cljs.core.truth_(d)?cljs.core.assoc.call(null,G__6761__$1,new cljs.core.Keyword(null,"defaultValue","defaultValue",-586131910),com.trustblocks.concerto.parser.literal_value.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"literal","literal",1664775605),d))):G__6761__$1);
+var G__6761__$3 = (cljs.core.truth_(regex)?cljs.core.assoc.call(null,G__6761__$2,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_regex_validator.call(null,regex)):G__6761__$2);
+var G__6761__$4 = (cljs.core.truth_(range_v)?cljs.core.assoc.call(null,G__6761__$3,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_domain_validator.call(null,range_v,type_name)):G__6761__$3);
+var G__6761__$5 = (cljs.core.truth_(len)?cljs.core.assoc.call(null,G__6761__$4,new cljs.core.Keyword(null,"lengthValidator","lengthValidator",-794930465),com.trustblocks.concerto.parser.__GT_length_validator.call(null,len)):G__6761__$4);
+return com.trustblocks.concerto.parser.with_decorators.call(null,G__6761__$5,node);
 
 });
 com.trustblocks.concerto.parser.__GT_relationship = (function com$trustblocks$concerto$parser$__GT_relationship(node){
@@ -215,12 +215,12 @@ var regex = (cljs.core.truth_(v)?com.trustblocks.concerto.parser.child.call(null
 var rng = (cljs.core.truth_(v)?com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"range-validator","range-validator",-1057399604),v):null);
 var len = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"length-validator","length-validator",-1800526572),node);
 var d = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"scalar-default","scalar-default",1720163167),node);
-var G__2585 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.scalar_kinds.call(null,kind,"StringScalar"))].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node)], null);
-var G__2585__$1 = (cljs.core.truth_(d)?cljs.core.assoc.call(null,G__2585,new cljs.core.Keyword(null,"defaultValue","defaultValue",-586131910),com.trustblocks.concerto.parser.literal_value.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"literal","literal",1664775605),d))):G__2585);
-var G__2585__$2 = (cljs.core.truth_(regex)?cljs.core.assoc.call(null,G__2585__$1,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_regex_validator.call(null,regex)):G__2585__$1);
-var G__2585__$3 = (cljs.core.truth_(rng)?cljs.core.assoc.call(null,G__2585__$2,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_domain_validator.call(null,rng,kind)):G__2585__$2);
-var G__2585__$4 = (cljs.core.truth_(len)?cljs.core.assoc.call(null,G__2585__$3,new cljs.core.Keyword(null,"lengthValidator","lengthValidator",-794930465),com.trustblocks.concerto.parser.__GT_length_validator.call(null,len)):G__2585__$3);
-return com.trustblocks.concerto.parser.with_decorators.call(null,G__2585__$4,node);
+var G__6762 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.scalar_kinds.call(null,kind,"StringScalar"))].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node)], null);
+var G__6762__$1 = (cljs.core.truth_(d)?cljs.core.assoc.call(null,G__6762,new cljs.core.Keyword(null,"defaultValue","defaultValue",-586131910),com.trustblocks.concerto.parser.literal_value.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"literal","literal",1664775605),d))):G__6762);
+var G__6762__$2 = (cljs.core.truth_(regex)?cljs.core.assoc.call(null,G__6762__$1,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_regex_validator.call(null,regex)):G__6762__$1);
+var G__6762__$3 = (cljs.core.truth_(rng)?cljs.core.assoc.call(null,G__6762__$2,new cljs.core.Keyword(null,"validator","validator",-1966190681),com.trustblocks.concerto.parser.__GT_domain_validator.call(null,rng,kind)):G__6762__$2);
+var G__6762__$4 = (cljs.core.truth_(len)?cljs.core.assoc.call(null,G__6762__$3,new cljs.core.Keyword(null,"lengthValidator","lengthValidator",-794930465),com.trustblocks.concerto.parser.__GT_length_validator.call(null,len)):G__6762__$3);
+return com.trustblocks.concerto.parser.with_decorators.call(null,G__6762__$4,node);
 
 });
 com.trustblocks.concerto.parser.__GT_map = (function com$trustblocks$concerto$parser$__GT_map(node){
@@ -230,23 +230,23 @@ com.trustblocks.concerto.parser.__GT_class = (function com$trustblocks$concerto$
 var kind = com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"class-kind","class-kind",-1031500717),node));
 var ext = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"extends","extends",-954903259),node);
 var ided = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"identified","identified",977175865),node);
-var G__2586 = new cljs.core.PersistentArrayMap(null, 4, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.class_kinds.call(null,kind))].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node),new cljs.core.Keyword(null,"isAbstract","isAbstract",-1506508250),(!((com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"abstract","abstract",1319624427),node) == null))),new cljs.core.Keyword(null,"properties","properties",685819552),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_property,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"property","property",-1114278232),node))], null);
-var G__2586__$1 = (cljs.core.truth_(ext)?cljs.core.assoc.call(null,G__2586,new cljs.core.Keyword(null,"superType","superType",1013761557),com.trustblocks.concerto.parser.type_identifier.call(null,com.trustblocks.concerto.parser.ident_of.call(null,ext))):G__2586);
-var G__2586__$2 = (cljs.core.truth_(ided)?cljs.core.assoc.call(null,G__2586__$1,new cljs.core.Keyword(null,"identified","identified",977175865),(cljs.core.truth_(com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"identified-by","identified-by",45017679),ided))?new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"IdentifiedBy"].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"identified-by","identified-by",45017679),ided))], null):new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Identified"].join('')], null))):G__2586__$1);
-return com.trustblocks.concerto.parser.with_decorators.call(null,G__2586__$2,node);
+var G__6763 = new cljs.core.PersistentArrayMap(null, 4, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,cljs.core.str.cljs$core$IFn$_invoke$arity$1(com.trustblocks.concerto.parser.class_kinds.call(null,kind))].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,node),new cljs.core.Keyword(null,"isAbstract","isAbstract",-1506508250),(!((com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"abstract","abstract",1319624427),node) == null))),new cljs.core.Keyword(null,"properties","properties",685819552),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_property,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"property","property",-1114278232),node))], null);
+var G__6763__$1 = (cljs.core.truth_(ext)?cljs.core.assoc.call(null,G__6763,new cljs.core.Keyword(null,"superType","superType",1013761557),com.trustblocks.concerto.parser.type_identifier.call(null,com.trustblocks.concerto.parser.ident_of.call(null,ext))):G__6763);
+var G__6763__$2 = (cljs.core.truth_(ided)?cljs.core.assoc.call(null,G__6763__$1,new cljs.core.Keyword(null,"identified","identified",977175865),(cljs.core.truth_(com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"identified-by","identified-by",45017679),ided))?new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"IdentifiedBy"].join(''),new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"identified-by","identified-by",45017679),ided))], null):new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Identified"].join('')], null))):G__6763__$1);
+return com.trustblocks.concerto.parser.with_decorators.call(null,G__6763__$2,node);
 
 });
 com.trustblocks.concerto.parser.__GT_declaration = (function com$trustblocks$concerto$parser$__GT_declaration(node){
 var inner = cljs.core.second.call(null,node);
-var pred__2587 = com.trustblocks.concerto.parser.tag_EQ_;
-var expr__2588 = inner;
-if(cljs.core.truth_(pred__2587.call(null,new cljs.core.Keyword(null,"enum-decl","enum-decl",-312943148),expr__2588))){
+var pred__6764 = com.trustblocks.concerto.parser.tag_EQ_;
+var expr__6765 = inner;
+if(cljs.core.truth_(pred__6764.call(null,new cljs.core.Keyword(null,"enum-decl","enum-decl",-312943148),expr__6765))){
 return com.trustblocks.concerto.parser.__GT_enum.call(null,inner);
 } else {
-if(cljs.core.truth_(pred__2587.call(null,new cljs.core.Keyword(null,"scalar-decl","scalar-decl",-1974177518),expr__2588))){
+if(cljs.core.truth_(pred__6764.call(null,new cljs.core.Keyword(null,"scalar-decl","scalar-decl",-1974177518),expr__6765))){
 return com.trustblocks.concerto.parser.__GT_scalar.call(null,inner);
 } else {
-if(cljs.core.truth_(pred__2587.call(null,new cljs.core.Keyword(null,"map-decl","map-decl",523791935),expr__2588))){
+if(cljs.core.truth_(pred__6764.call(null,new cljs.core.Keyword(null,"map-decl","map-decl",523791935),expr__6765))){
 return com.trustblocks.concerto.parser.__GT_map.call(null,inner);
 } else {
 return com.trustblocks.concerto.parser.__GT_class.call(null,inner);
@@ -274,23 +274,23 @@ com.trustblocks.concerto.parser.__GT_import = (function com$trustblocks$concerto
 var inner = cljs.core.second.call(null,node);
 var ns_ = com.trustblocks.concerto.parser.split_versioned.call(null,com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"versioned-name","versioned-name",-184094547),inner)));
 var uri = com.trustblocks.concerto.parser.uri_of.call(null,inner);
-var pred__2591 = com.trustblocks.concerto.parser.tag_EQ_;
-var expr__2592 = inner;
-if(cljs.core.truth_(pred__2591.call(null,new cljs.core.Keyword(null,"import-all","import-all",2018423611),expr__2592))){
-var G__2594 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportAll"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_], null);
+var pred__6768 = com.trustblocks.concerto.parser.tag_EQ_;
+var expr__6769 = inner;
+if(cljs.core.truth_(pred__6768.call(null,new cljs.core.Keyword(null,"import-all","import-all",2018423611),expr__6769))){
+var G__6771 = new cljs.core.PersistentArrayMap(null, 2, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportAll"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_], null);
 if(cljs.core.truth_(uri)){
-return cljs.core.assoc.call(null,G__2594,new cljs.core.Keyword(null,"uri","uri",-774711847),uri);
+return cljs.core.assoc.call(null,G__6771,new cljs.core.Keyword(null,"uri","uri",-774711847),uri);
 } else {
-return G__2594;
+return G__6771;
 }
 } else {
-if(cljs.core.truth_(pred__2591.call(null,new cljs.core.Keyword(null,"import-types","import-types",-1681087825),expr__2592))){
-var G__2595 = new cljs.core.PersistentArrayMap(null, 3, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportTypes"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_,new cljs.core.Keyword(null,"types","types",590030639),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.ident_of,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import-item","import-item",1060217869),inner))], null);
-var G__2595__$1 = (cljs.core.truth_(uri)?cljs.core.assoc.call(null,G__2595,new cljs.core.Keyword(null,"uri","uri",-774711847),uri):G__2595);
-if(cljs.core.truth_(cljs.core.some.call(null,(function (p1__2590_SHARP_){
-return com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"alias","alias",-2039751630),p1__2590_SHARP_);
+if(cljs.core.truth_(pred__6768.call(null,new cljs.core.Keyword(null,"import-types","import-types",-1681087825),expr__6769))){
+var G__6772 = new cljs.core.PersistentArrayMap(null, 3, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportTypes"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_,new cljs.core.Keyword(null,"types","types",590030639),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.ident_of,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import-item","import-item",1060217869),inner))], null);
+var G__6772__$1 = (cljs.core.truth_(uri)?cljs.core.assoc.call(null,G__6772,new cljs.core.Keyword(null,"uri","uri",-774711847),uri):G__6772);
+if(cljs.core.truth_(cljs.core.some.call(null,(function (p1__6767_SHARP_){
+return com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"alias","alias",-2039751630),p1__6767_SHARP_);
 }),com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import-item","import-item",1060217869),inner)))){
-return cljs.core.assoc.call(null,G__2595__$1,new cljs.core.Keyword(null,"aliasedTypes","aliasedTypes",709863852),cljs.core.into.call(null,cljs.core.PersistentVector.EMPTY,cljs.core.keep.call(null,(function (it){
+return cljs.core.assoc.call(null,G__6772__$1,new cljs.core.Keyword(null,"aliasedTypes","aliasedTypes",709863852),cljs.core.into.call(null,cljs.core.PersistentVector.EMPTY,cljs.core.keep.call(null,(function (it){
 var temp__5825__auto__ = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"alias","alias",-2039751630),it);
 if(cljs.core.truth_(temp__5825__auto__)){
 var a = temp__5825__auto__;
@@ -300,29 +300,29 @@ return null;
 }
 }),com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import-item","import-item",1060217869),inner))));
 } else {
-return G__2595__$1;
+return G__6772__$1;
 }
 } else {
-if(cljs.core.truth_(pred__2591.call(null,new cljs.core.Keyword(null,"import-type","import-type",-499283032),expr__2592))){
-var G__2596 = new cljs.core.PersistentArrayMap(null, 3, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportType"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_,new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,inner)], null);
+if(cljs.core.truth_(pred__6768.call(null,new cljs.core.Keyword(null,"import-type","import-type",-499283032),expr__6769))){
+var G__6773 = new cljs.core.PersistentArrayMap(null, 3, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"ImportType"].join(''),new cljs.core.Keyword(null,"namespace","namespace",-377510372),ns_,new cljs.core.Keyword(null,"name","name",1843675177),com.trustblocks.concerto.parser.ident_of.call(null,inner)], null);
 if(cljs.core.truth_(uri)){
-return cljs.core.assoc.call(null,G__2596,new cljs.core.Keyword(null,"uri","uri",-774711847),uri);
+return cljs.core.assoc.call(null,G__6773,new cljs.core.Keyword(null,"uri","uri",-774711847),uri);
 } else {
-return G__2596;
+return G__6773;
 }
 } else {
-throw (new Error(["No matching clause: ",cljs.core.str.cljs$core$IFn$_invoke$arity$1(expr__2592)].join('')));
+throw (new Error(["No matching clause: ",cljs.core.str.cljs$core$IFn$_invoke$arity$1(expr__6769)].join('')));
 }
 }
 }
 });
 com.trustblocks.concerto.parser.__GT_model = (function com$trustblocks$concerto$parser$__GT_model(tree){
 var v = com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"version","version",425292698),tree);
-var G__2597 = new cljs.core.PersistentArrayMap(null, 5, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Model"].join(''),new cljs.core.Keyword(null,"decorators","decorators",350732878),com.trustblocks.concerto.parser.decorators_of.call(null,tree),new cljs.core.Keyword(null,"namespace","namespace",-377510372),com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"versioned-name","versioned-name",-184094547),com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"namespace-decl","namespace-decl",179599213),tree))),new cljs.core.Keyword(null,"imports","imports",-1249933394),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_import,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import","import",-1399500709),tree)),new cljs.core.Keyword(null,"declarations","declarations",1621100858),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_declaration,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"declaration","declaration",-1819933768),tree))], null);
+var G__6774 = new cljs.core.PersistentArrayMap(null, 5, [new cljs.core.Keyword(null,"$class","$class",1168854512),[com.trustblocks.concerto.parser.mm,"Model"].join(''),new cljs.core.Keyword(null,"decorators","decorators",350732878),com.trustblocks.concerto.parser.decorators_of.call(null,tree),new cljs.core.Keyword(null,"namespace","namespace",-377510372),com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"versioned-name","versioned-name",-184094547),com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"namespace-decl","namespace-decl",179599213),tree))),new cljs.core.Keyword(null,"imports","imports",-1249933394),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_import,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"import","import",-1399500709),tree)),new cljs.core.Keyword(null,"declarations","declarations",1621100858),cljs.core.mapv.call(null,com.trustblocks.concerto.parser.__GT_declaration,com.trustblocks.concerto.parser.children.call(null,new cljs.core.Keyword(null,"declaration","declaration",-1819933768),tree))], null);
 if(cljs.core.truth_(v)){
-return cljs.core.assoc.call(null,G__2597,new cljs.core.Keyword(null,"concertoVersion","concertoVersion",731845845),com.trustblocks.concerto.parser.unquote_string.call(null,com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"string-lit","string-lit",1570344494),v))));
+return cljs.core.assoc.call(null,G__6774,new cljs.core.Keyword(null,"concertoVersion","concertoVersion",731845845),com.trustblocks.concerto.parser.unquote_string.call(null,com.trustblocks.concerto.parser.text.call(null,com.trustblocks.concerto.parser.child.call(null,new cljs.core.Keyword(null,"string-lit","string-lit",1570344494),v))));
 } else {
-return G__2597;
+return G__6774;
 }
 });
 /**

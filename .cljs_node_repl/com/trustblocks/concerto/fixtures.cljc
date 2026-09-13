@@ -20,6 +20,14 @@
   #?(:clj  (json/parse-string s)
      :cljs (js->clj (.parse js/JSON s))))
 
+(defn read-resource
+  "Any file under test-resources/ as parsed JSON with string keys, addressed by
+  its path relative to test-resources/. raw below is this with the fixtures/
+  template layout baked in; other test namespaces needing a one-off resource
+  call this directly instead of duplicating the JVM/cljs read split."
+  [path]
+  (-> (read-fixture path) parse-json))
+
 (def models
   "Template -> its model files. Listed explicitly rather than globbed so the
   tests load identically from a jar, a directory, or babashka."

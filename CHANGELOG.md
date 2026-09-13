@@ -110,4 +110,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The compiled schema is currently weaker than Concerto's own validator. See the
 README for the list.
 
+### Added
+
+- `sizeValidator` (`CollectionSizeValidator`, Concerto 4.1's `size=[min,max]`
+  on array and map properties) compiles to Malli `:min`/`:max` on the
+  collection itself, not on its elements. Concerto 4.1 is the version this was
+  checked against: `@accordproject/concerto-cli` has not published a 4.2 or
+  5.x release yet, though `@accordproject/concerto-core`/`concerto-cto`/
+  `concerto-util` are already at 5.0.0 -- the `parse` output this library
+  consumes was verified byte-identical between the two.
+- Two rules from `concerto-conformance`'s `semantic/features/collections.feature`
+  are enforced at schema-compile time: `minSize` must be `<=` `maxSize`, and a
+  size validator may only appear on an array or map property. Neither is
+  checked by `concerto parse` itself -- both `size=[10,5]` and a size
+  validator on a plain scalar property parse without complaint -- so nothing
+  upstream of this compiler catches them.
+- `test/com/trustblocks/concerto/conformance_test.cljc` runs the `validate/`
+  suite from
+  [accordproject/concerto-conformance](https://github.com/accordproject/concerto-conformance)
+  -- the reference project's own model+instance+expected-verdict fixtures for
+  primitives, required/optional fields, enums, `$class` resolution and
+  collection size -- against this library's compiled schemas. Vendored under
+  `test-resources/conformance/`, so it needs neither Node nor network at test
+  time, matching every other suite here. That repo's other suite,
+  `semantic/`, tests Concerto's `ModelManager` rejecting a malformed model at
+  load time; this library does not delegate to that layer, so its two
+  directly relevant rules are enforced in `malli.cljc` instead (see above)
+  rather than imported wholesale.
+
 [Unreleased]: https://github.com/TrustBlocks/concerto-clj/commits/main
