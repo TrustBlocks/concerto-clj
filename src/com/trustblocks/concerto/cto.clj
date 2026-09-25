@@ -1,15 +1,23 @@
 (ns com.trustblocks.concerto.cto
-  "CTO text -> metamodel EDN, by shelling out to Accord's `concerto` CLI.
+  "CTO text -> metamodel EDN: by shelling out to Accord's `concerto` CLI (the
+  default), or with the instaparse port of its grammar in `concerto.parser`
+  (`:parser :clojure`, no Node).
 
-  This is the one namespace that does I/O and the one that needs Node, which is
-  why it is separate: `concerto.metamodel` and `concerto.malli` take data and
-  have no opinion about where it came from. Anything that can produce metamodel
-  JSON can feed them -- the CLI today, an instaparse port of
-  `concerto-cto/lib/parser.pegjs` later, or a JSON file someone else generated.
+  This is the one namespace that does I/O and the only one that can need Node,
+  which is why it is separate: `concerto.metamodel` and `concerto.malli` take
+  data and have no opinion about where it came from. Anything that produces
+  metamodel JSON can feed them -- the CLI, the Clojure parser, or a JSON file
+  someone else generated.
 
-  The grammar is normative and it drifts; reimplementing it is a standing
-  obligation to track that drift. Consuming the metamodel instead is a contract
-  against a versioned artifact."
+  The grammar is normative and it drifts; a port is a standing obligation to
+  track that drift, which is why the CLI stays the default and the port is
+  held to it by script/differential.clj rather than trusted on its own.
+
+  A third source to watch: accordproject/concerto-rust, Accord's own Rust
+  Concerto runtime, built for native, WASM and FFI targets. As of 0.1.0 it
+  loads and validates models from metamodel JSON but has no CTO parser yet.
+  If it gains one, running it as WASM inside the JVM would give a parser
+  Accord maintains -- retiring the obligation above -- without Node."
   (:require [babashka.process :as p]
             [cheshire.core :as json]
             [clojure.java.io :as io]
