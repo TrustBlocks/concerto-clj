@@ -6,8 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- An explicit `null` on an optional property is accepted, as Concerto does, and
+  no longer rejected as the wrong type. It was the only disagreement with the
+  CLI across the 108 sample and request instances in the cicero-template-library
+  (five `latedeliveryandpenalty*` requests carrying `"deliveredAt": null`).
+- The CTO parser spelled every map key and value type `Object*Type`; it now
+  emits `StringMapKeyType`, `IntegerMapValueType` and the rest, as the CLI does.
+
 ### Added
 
+- `MapDeclaration` compiles to `:map-of`, inlined where used. Keys may be
+  String, DateTime, or a scalar of either; values may be any primitive, enum,
+  scalar, concept, asset, relationship (`--> Asset`) or another map. The CTO
+  grammar now parses `--> Type` as a map value.
+- `:concerto-version` (3, 4 or 5; default 4) on `->schema` and `->edn`, for the
+  places Concerto 5 is stricter: DateTime values must be a real
+  `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`, and a scalar's constraints
+  apply to map keys. Checked against `concerto validate` with concerto-core 3.16.7, 4.2.0 and 5.2.1.
+- Registry schemas `:concerto/string-key`, `:concerto/map-key`,
+  `:concerto/date-time-key` and `:concerto/date-time-strict`.
+  Schemas that use them read back given `registry*`.
 - `com.trustblocks.concerto.metamodel` — Concerto metamodel JSON/EDN to a
   declaration registry. Type references are resolved eagerly by filling in the
   `namespace` slot that `TypeIdentifier` already carries, so the registry is

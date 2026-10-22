@@ -195,13 +195,27 @@
       len     (assoc :lengthValidator (->length-validator len))
       true    (with-decorators node))))
 
+(defn- ->map-type
+  "A map's key or value type, spelled the way `concerto parse` does: a primitive
+  is a class of its own (`StringMapKeyType`, `IntegerMapValueType`) and carries
+  no `type`; anything else is an Object*Type naming the declaration. Collapsing
+  both to Object*Type -- as this once did -- leaves a consumer unable to tell
+  the primitive String from a declaration that happens to be called String."
+  [side nm & {:keys [relationship]}]
+  (cond
+    relationship {:$class (str mm "RelationshipMap" side "Type")
+                  :type   (type-identifier nm)}
+    (primitive-types nm)
+    {:$class (str mm (str/replace (primitive-types nm) "Property" (str "Map" side "Type")))}
+    :else {:$class (str mm "ObjectMap" side "Type")
+           :type   (type-identifier nm)}))
+
 (defn- ->map [node]
   (-> {:$class (str mm "MapDeclaration")
        :name   (ident-of node)
-       :key    {:$class (str mm "ObjectMapKeyType")
-                :type   (type-identifier (ident-of (child :map-key node)))}
-       :value  {:$class (str mm "ObjectMapValueType")
-                :type   (type-identifier (ident-of (child :map-value node)))}}
+       :key    (->map-type "Key" (ident-of (child :map-key node)))
+       :value  (let [v (child :map-value node)]
+                 (->map-type "Value" (ident-of v) :relationship (some? (child :rel v))))}
       (with-decorators node)))
 
 (defn- ->class [node]

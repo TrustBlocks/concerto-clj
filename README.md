@@ -106,6 +106,30 @@ Maps are closed, matching Concerto, which rejects undeclared properties. Pass
 though a storage adapter should strip its own derived keys instead — that way
 the guarantee this library offers is the one Concerto offers.
 
+### Which Concerto
+
+The validator this library agrees with is not one fixed thing: Concerto 5 is
+stricter than 3.x and 4.x, and the schemas it produces differ accordingly.
+Choose with `:concerto-version` (3, 4 or 5; the default is 4, and 3 and 4 behave
+the same):
+
+```clojure
+(cm/->schema reg fqn)                       ; 3.x / 4.x
+(cm/->schema reg fqn :concerto-version 5)   ; 5.x
+```
+
+| | 3.x / 4.x | 5.x |
+|---|---|---|
+| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
+| scalar's constraints on a map key | not checked | checked |
+| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | checked |
+| DateTime map key | loose | loose, unchanged |
+
+Each cell was observed by running `concerto validate` with concerto-core 3.16.7,
+4.2.0 and 5.2.1 (3.16.7 and 4.2.0 agree on every case), and the test suite
+carries the DateTime tables for both behaviors. Metamodel JSON is identical
+across the two, so the parser, fixtures and registry do not depend on the choice.
+
 A property whose declared type has several concrete subtypes compiles to a
 `:multi` dispatching on `$class`, because Concerto permits polymorphism and a
 closed schema for the parent alone would reject a legitimate subclass:
@@ -115,6 +139,11 @@ closed schema for the parent alone would reject a legitimate subclass:
  ["poly@1.0.0.Cat" [:ref "poly@1.0.0.Cat"]]
  ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
 ```
+
+An optional property compiles to `[:k {:optional true} [:maybe schema]]`: Concerto
+treats an explicit `null` on an optional property as absent (and `concerto
+validate` drops it), so the schema does too. A `null` on a required property is
+still a missing field, and a `null` inside an array is still an error.
 
 Validators are enforced. `regex`, `length` and `range` compile to Malli
 constraints, and scalar declarations inline as their underlying primitive with
@@ -400,7 +429,8 @@ concepts stopped compiling to a bare `:map`.
 Still narrower than Concerto's own validator:
 
 - `defaultValue` is ignored
-- `MapDeclaration` is not handled
+- enum-valued map entries are accepted, though every Concerto version checked
+  (3.16.7, 4.2.0 and 5.2.1) wrongly rejects them
 
 These are gaps in coverage, not silent ones. An unhandled declaration kind, an
 unhandled property kind, an unportable regex flag, a type whose model is not
