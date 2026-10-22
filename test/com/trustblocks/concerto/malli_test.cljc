@@ -191,7 +191,7 @@
   (testing "$class is what makes the flattening lossless, so it is an equality
             check, never inferred structurally"
     (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
-      (is (= [:$class {:optional true} [:= fx/note-fqn]]
+      (is (= [:$class {:optional true} [:maybe [:enum fx/note-fqn ""]]]
              (first (entries (map-for form fx/note-fqn))))
           "optional in a registry entry, because a nested value may omit it; the
            root's own $class is required by the wrapper around the :ref")

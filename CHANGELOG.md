@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A nested concrete concept with a `null` or empty `$class` is read as the
+  declared type, as Concerto does. It was rejected.
 - `:concerto-version 5` was the strict mode, and it should not have been: 5.0 and
   5.1 behave like 4.x, and the strictness (DateTime, scalar map keys, typed map
   values) arrived in 5.2.0. `5` now means 5.0; the strict mode is `"5.2"`. A
@@ -36,12 +38,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (throws the first). Opt-in. Covers declarations, properties, inheritance,
   identifiers, relationships, validators, maps, scalars, imports, namespaces,
   decorator validation and metamodel validation, following concerto-core 5.2.1.
+  Metamodel validation compiles concerto-metamodel's own CTO with this library's
+  compiler and checks the model AST as an instance of it, reporting concerto-core's
+  `MetamodelException` wording; checked against concerto-core by a 6,000-mutation
+  differential (see README).
   All 116 scenarios of concerto-conformance's `semantic/` suite are accounted for:
   108 pass, 8 are held to 5.2.1's own behavior where it fails the suite
   (`core-disagrees.edn`). Raises nothing on the 237 model files of the
   cicero-template-library.
 - `script/gen_metamodel_schema.clj` and the generated `metamodel-schema`: the
-  properties each metamodel class may carry, from concerto-metamodel's CTO.
+  metamodel compiled to a Malli schema, plus each class's declared property types,
+  from concerto-metamodel's CTO.
 - The `validate/` suite of concerto-conformance is vendored and run in full
   (42 scenarios, at `:concerto-version` 4 and 5).
 

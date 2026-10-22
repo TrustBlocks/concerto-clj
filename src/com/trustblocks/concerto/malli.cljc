@@ -584,7 +584,9 @@
              ;; see `object-schema`.
              (if (or root? (abstract? reg fqn))
                [(key-fn "$class") [:= fqn]]
-               [(key-fn "$class") {:optional true} [:= fqn]])
+               ;; Concerto treats a null or empty $class as absent, so the
+               ;; declared type is read in its place.
+               [(key-fn "$class") {:optional true} [:maybe [:enum fqn ""]]])
              [(key-fn "$identifier") {:optional true} :string]]
 
       (#{"TransactionDeclaration" "EventDeclaration"} kind)

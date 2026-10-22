@@ -213,3 +213,85 @@
       (is (nil? (at "off"))))
     (testing "and with no option at all, decorators are not validated"
       (is (nil? (first-problem m))))))
+
+;; -------------------------------------------------------- metamodel validation
+
+(def ^:private ast
+  "A valid model AST, as `concerto parse` writes it."
+  (model "a@1.0.0" []
+         {:$class (str mmc "ConceptDeclaration") :name "X" :isAbstract false
+          :properties [{:$class (str mmc "StringProperty") :name "p"
+                        :isArray false :isOptional false}]}))
+
+(defn- metamodel-problem [m]
+  (first-problem [m] :options {:metamodelValidation true} :validate-on-load [true]))
+
+(deftest metamodel-validation-matches-concerto
+  (testing "every message below is what concerto-core 5.2.1 says for that AST"
+    (is (nil? (metamodel-problem ast)))
+
+    (is (= {:class "MetamodelException"
+            :message "Unexpected properties for type concerto.metamodel@1.0.0.ConceptDeclaration: bogus"}
+           (select-keys (metamodel-problem (assoc-in ast [:declarations 0 :bogus] 1))
+                        [:class :message])))
+
+    (is (= "The instance \"concerto.metamodel@1.0.0.ImportType\" is missing the required field \"name\"."
+           (:message (metamodel-problem
+                      (assoc ast :imports [{:$class (str mmc "ImportType") :namespace "a@1.0.0"}])))))
+
+    (is (= "Expected value at path `$.declarations[0].properties[0].isArray` to be of type `Boolean`"
+           (:message (metamodel-problem
+                      (assoc-in ast [:declarations 0 :properties 0 :isArray] "yes")))))
+
+    (is (= "Expected value at path `$.declarations` to be an array of type `Declaration`"
+           (:message (metamodel-problem (assoc ast :declarations {}))))))
+
+  (testing "a property with a default may be left out, as Concerto allows"
+    (is (nil? (metamodel-problem (update-in ast [:declarations 0 :properties 0] dissoc :isOptional))))
+    (is (nil? (metamodel-problem (update-in ast [:declarations 0] dissoc :isAbstract)))))
+
+  (testing "it runs only when asked: the option, and a model added with validation"
+    (let [bad (assoc-in ast [:declarations 0 :bogus] 1)]
+      (is (nil? (first-problem [bad])))
+      (is (nil? (first-problem [bad] :options {:metamodelValidation true} :validate-on-load [false])))
+      (is (nil? (first-problem [bad] :validate-on-load [true])))))
+
+  (testing "and Concerto reads the model before it validates it: a missing name is
+           an IllegalModelException from the read, not a MetamodelException"
+    (is (= "IllegalModelException"
+           (:class (metamodel-problem (update-in ast [:declarations 0] dissoc :name)))))))
+
+(deftest the-metamodel-schema-accepts-real-asts
+  (testing "every AST in the suite's specifications that Concerto loads is valid
+           against the metamodel, so the schema compiled from metamodel.cto does
+           not reject what Concerto accepts. The ones it does reject are the ones
+           built to be malformed."
+    (let [malformed #{"concepts/models/CLASS_DECLARATION_013/class_declaration_013_properties_absent.json"
+                      "concepts/models/MODEL_ELEMENT_003/model_element_003_unrecognised_element.json"
+                      "concepts/models/PROPERTY_003/property_003_meta_type_invalid.json"
+                      "maps/models/MAP_DECLARATION_002/map_declaration_002_missing_key.json"
+                      "metamodel/models/METAMODEL_001/metamodel_001_undeclared_ast_property.json"
+                      "metamodel/models/METAMODEL_002/metamodel_002_unknown_metamodel_version.json"}
+          files     (distinct (mapcat :models scenarios))
+          verdict   (fn [f] (empty? (mc/check [(load-model f)]
+                                              :options {:metamodelValidation true}
+                                              :validate-on-load [true])))]
+      (is (< 100 (count files)))
+      (doseq [f files :when (not (contains? malformed f))]
+        (is (empty? (filter #(= "MetamodelException" (:class %))
+                            (mc/check [(load-model f)]
+                                      :options {:metamodelValidation true}
+                                      :validate-on-load [true])))
+            f))
+      (doseq [f files :when (contains? malformed f)]
+        (is (not (verdict f)) (str f " is malformed"))))))
+
+(deftest the-metamodel-schema-accepts-asts-with-locations
+  (testing "`concerto parse` output as written, source locations included, is
+           valid -- loaded together, as a template's models import one another"
+    (doseq [[template files] fx/models
+            :let [models (mapv #(mm/json->edn (fx/raw template %)) files)]]
+      (is (empty? (mc/check models
+                            :options {:metamodelValidation true}
+                            :validate-on-load (repeat (count models) true)))
+          template))))

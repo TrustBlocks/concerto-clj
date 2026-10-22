@@ -273,6 +273,15 @@
     (is (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "z" {"s" {"name" "x"}}})
         "Solo is concrete, though its parent is abstract"))
 
+  (testing "a null or empty $class is read as absent too, as Concerto does"
+    (is (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "i" {"$class" nil "n" "a"}}))
+    (is (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "i" {"$class" "" "n" "a"}}))
+    (is (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "f" {"m" {"$class" nil "b" "x"}}})
+        "including where the declared type has subtypes")
+    (is (not (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "p" {"a" {"$class" nil "name" "x" "purrs" true}}}))
+        "but not where it is abstract: there is nothing to read it as")
+    (is (not (c-ok? "c@1.0.0.H" {"$class" nil "i" {"n" "a"}})) "and never at the root"))
+
   (testing "a nested value is still checked against that type"
     (is (not (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "i" {"n" 1}})))
     (is (not (c-ok? "c@1.0.0.H" {"$class" "c@1.0.0.H" "i" {}}))))
