@@ -109,7 +109,7 @@
 
 (deftest map-declarations-export-as-edn
   (let [form (cm/->edn maps-reg "m@1.0.0.OnlyStrings")]
-    (is (= [:map-of :concerto/map-key :int]
+    (is (= [:map-of :concerto/map-key :concerto/integer]
            (get (by-key (map-for form "m@1.0.0.OnlyStrings")) :a)))
     (is (= form (edn/read-string (pr-str form))))
     (testing "and reads back, named key schemas included"
@@ -393,3 +393,152 @@
     (is (ok? {"as" ["x" "y"]}))
     (is (not (ok? {"a" 5})))
     (is (not (ok? {"a" {"$class" "r@1.0.0.A" "id" "x"}})) "an embedded resource is not a reference")))
+
+;; ------------------------------------------------- what an instance may carry
+
+(def ^:private inst-reg
+  "Every expectation in the tests below was run through concerto-core -- the system
+  properties, falsy classes, number forms and blank identifiers on all of 3.16.7,
+  3.20.0, 3.26.0, 4.0.0, 4.1.5, 5.0.0, 5.1.0, 5.2.0 and 5.2.1, which agree, and the
+  relationships on 3.23.0 to 5.2.1, in the two groups the tests name."
+  (mm/registry
+   [(p/parse-string
+     (str "namespace s@1.0.0\n"
+          "concept C { o String a }\n"
+          "concept D identified by id { o String id }\n"
+          "asset A identified { o String a optional }\n"
+          "participant P identified by pid { o String pid }\n"
+          "transaction T { o String a }\n"
+          "event E { o String a }\n"
+          "concept H { o C c optional\n o Integer n optional\n o Long l optional\n"
+          "  o DateTime d optional\n o String code regex=/^[A-Z]+$/ optional }\n"
+          "asset K identified by kid { o String kid }\n"
+          "asset Sub extends K { }\n"
+          "asset Other identified by oid { o String oid }\n"
+          "abstract asset Base identified by bid { o String bid }\n"
+          "asset Impl extends Base { }\n"
+          "concept R { --> K k optional\n --> Base b optional\n --> K[] ks optional }\n"))]))
+
+(defn- ok?
+  ([fqn data] (ok? fqn data {}))
+  ([fqn data opts]
+   (m/validate (apply cm/->schema inst-reg (str "s@1.0.0." fqn) (mapcat identity opts))
+               (inst/json->edn (assoc data "$class" (str "s@1.0.0." fqn))))))
+
+(deftest system-properties-are-read-as-concerto-reads-them
+  (testing "$identifier on a declaration that is not `identified`: never read, so anything"
+    (doseq [fqn ["C" "D" "P" "T" "E"]
+            v   [nil 0 false "" 1 "x" true [] {} [1] {"a" 1} 1.5]
+            :let [base (case fqn "D" {"id" "i"} "P" {"pid" "p"} {"a" "x"})
+                  base (if (= fqn "C") {"a" "x"} base)]]
+      (is (ok? fqn (assoc base "$identifier" v)) (pr-str fqn v))))
+
+  (testing "on an `identified` one it is a non-empty string, or null"
+    (is (ok? "A" {"$identifier" "x"}))
+    (is (ok? "A" {"$identifier" nil}))
+    (is (ok? "A" {}) "or absent")
+    (doseq [v ["" " " "\t" "\n" "\u00a0" "\ufeff" 0 false 1 true [] {} [1] 1.5]]
+      (is (not (ok? "A" {"$identifier" v})) (pr-str v)))
+    (is (ok? "A" {"$identifier" "\u200b"}) "a zero-width space is not whitespace to JavaScript"))
+
+  (testing "$timestamp on a transaction or event: never read, so anything"
+    (doseq [fqn ["T" "E"] v [nil 0 false "" 1 "x" true [] {} [1] 1.5 "2019-13-45"]]
+      (is (ok? fqn {"a" "x" "$timestamp" v}) (pr-str fqn v))))
+
+  (testing "on anything else it is refused, null included"
+    (doseq [fqn ["C" "D" "A" "P"]
+            v   [nil 0 "" "x" "2019-01-20T10:00:00Z" true []]
+            :let [base (case fqn "D" {"id" "i"} "P" {"pid" "p"} {"a" "x"})]]
+      (is (not (ok? fqn (assoc base "$timestamp" v))) (pr-str fqn v)))))
+
+(deftest a-falsy-class-is-no-class
+  (testing "nested, null, \"\", 0 and false are read as the declared type"
+    (doseq [v [nil "" 0 0.0 false]]
+      (is (ok? "H" {"c" {"$class" v "a" "x"}}) (pr-str v))))
+  (testing "and anything else is a class that is not there"
+    (doseq [v [1 5 true [] {} "x" [1] 1.5 "s@1.0.0.Nope"]]
+      (is (not (ok? "H" {"c" {"$class" v "a" "x"}})) (pr-str v))))
+  (testing "but the root has to say what it is"
+    (doseq [v [nil "" 0 false]]
+      (is (not (m/validate (cm/->schema inst-reg "s@1.0.0.H")
+                           (inst/json->edn {"$class" v}))) (pr-str v)))))
+
+(deftest an-integer-is-a-whole-number-however-it-is-written
+  (doseq [f ["n" "l"]]
+    (testing f
+      (doseq [x [1 0 -0.0 1.0 1e0 1e3 1e21 -1e21 100.0 9007199254740993
+                 #?(:clj 123456789012345678901N)]]
+        (is (ok? "H" {f x}) (pr-str x)))
+      (doseq [x [1.5 -0.5 "1" true [] {} [1]]]
+        (is (not (ok? "H" {f x})) (pr-str x))))))
+
+(deftest an-identifier-is-not-blank
+  (doseq [v ["" " " "  " "\t" "\n" "\u00a0" "\ufeff" "\u2003" "\u3000"]]
+    (is (not (ok? "K" {"kid" v})) (pr-str v)))
+  (doseq [v ["x " " x" "\u200b" "a b"]]
+    (is (ok? "K" {"kid" v}) (pr-str v))))
+
+(deftest a-pattern-ends-where-javascripts-does
+  (testing "`$` does not match before a final newline, as it does on the JVM"
+    (is (ok? "H" {"code" "ABC"}))
+    (doseq [v ["ABC\n" "ABC\r\n" "ABC\r" "ABC\u2028"]]
+      (is (not (ok? "H" {"code" v})) (pr-str v))))
+  (testing "a DateTime ends there too"
+    (doseq [opts [{} {:concerto-version "5.2"}]]
+      (is (ok? "H" {"d" "2019-01-20T10:00:00Z"} opts))
+      (is (not (ok? "H" {"d" "2019-01-20T10:00:00Z\n"} opts))))))
+
+;; The relationship URIs. Concerto reads the value as a URI, so `resource:`, a
+;; `#`, a `?` or a `:` each mean something. Concerto 5 and earlier read it with
+;; different parsers, which differ in these cases.
+(def ^:private relationship-cases
+  "[value K-accepts? Base-accepts?], the same on 3.23.0 to 5.2.1 unless the tests say."
+  [["x" true true] ["a" true true] ["x y" true true] ["x " true true] ["\u200b" true true]
+   ["x#" true true] ["x/y" true true] ["x@y" true true]
+   ["" false false] ["#" false false] ["resource:" false false]
+   ["t#x" false false] ["#x" false false] ["a#b" false false] ["K#x" false false]
+   ["resource:garbage" true true] ["resource:x" true true]
+   ["s@1.0.0.K#x" true false] ["resource:s@1.0.0.K#x" true false]
+   ["s@1.0.0.K#" true true] ["s@1.0.0.K#x#y" true false]
+   ["s@1.0.0.Sub#x" true false] ["resource:s@1.0.0.Sub#x" true false]
+   ["s@1.0.0.Other#x" false false] ["resource:s@1.0.0.Other#x" false false]
+   ["s@1.0.0.Base#x" false true] ["s@1.0.0.Impl#x" false true]
+   ["resource:s@1.0.0.Base#x" false true] ["resource:s@1.0.0.Impl#x" false true]
+   ["s@1.0.0.P#x" false false] ["s@1.0.0.Nope#x" false false] ["s@1.0.0#x" false false]
+   ["s@1.0.0.#x" false false] ["s.K#x" false false] ["x@1.0.0.K#x" false false]
+   ["s@1.0.0.K %20" true true]
+   ["resource:s@1.0.0.K#%20" true false] ["resource:s@1.0.0.K#%" false false]
+   ["resource:s@1.0.0.K#%FF" false false] ["resource:s@1.0.0.K#%C3%A9" true false]
+   ["resource:s@1.0.0.K#%C3" false false] ["100%" false false] ["a%20b" true true]
+   ["urn:x" false false] ["x:y" false false] ["http://h/p" false false]
+   ["a?b" false false] ["a?" true true] ["?q" false false] ["resource:x?q" false false]
+   ["resource:resource:s@1.0.0.K#x" false false] ["resource://u@h/x" false false]
+   ["resource://h:80/x" false false] ["//h:x/p" false false]])
+
+(deftest a-relationship-is-a-uri-for-a-type-the-property-can-hold
+  (doseq [[v k b] relationship-cases
+          opts    [{} {:concerto-version "5.2"}]]
+    (is (= k (boolean (ok? "R" {"k" v} opts))) (pr-str [:k v opts]))
+    (is (= b (boolean (ok? "R" {"b" v} opts))) (pr-str [:b v opts]))
+    (is (= k (boolean (ok? "R" {"ks" [v]} opts))) (pr-str [:ks v opts]))))
+
+(deftest the-scheme-is-the-one-thing-5-0-changed
+  (testing "5.0 and later read `resource:` in any case"
+    (doseq [v ["Resource:s@1.0.0.K#x" "RESOURCE:s@1.0.0.K#x"]]
+      (is (ok? "R" {"k" v} {:concerto-version 5}))
+      (is (ok? "R" {"k" v} {:concerto-version "5.2"}))))
+  (testing "and before it only in lower case, ignoring the space before it"
+    (doseq [v ["Resource:s@1.0.0.K#x" "RESOURCE:s@1.0.0.K#x"]]
+      (is (not (ok? "R" {"k" v} {:concerto-version "4.1.5"}))))
+    (doseq [v [" resource:s@1.0.0.K#x" "\tresource:s@1.0.0.K#x "]]
+      (is (ok? "R" {"k" v} {:concerto-version "4.1.5"}))
+      (is (not (ok? "R" {"k" v} {:concerto-version 5}))))
+    (testing "and a fragment of only whitespace is none"
+      (is (ok? "R" {"k" "a#\n"} {:concerto-version "4.1.5"}))
+      (is (not (ok? "R" {"k" "a#\n"} {:concerto-version 5})))
+      (doseq [v [" " "\n"]]
+        (is (not (ok? "R" {"k" v} {:concerto-version "4.1.5"})) (pr-str v))
+        (is (ok? "R" {"k" v} {:concerto-version 5}) (pr-str v)))))
+  (testing "`//host` is an id before 5.0, and not after"
+    (is (ok? "R" {"k" "//h"} {:concerto-version 4}))
+    (is (not (ok? "R" {"k" "//h"} {:concerto-version 5})))))

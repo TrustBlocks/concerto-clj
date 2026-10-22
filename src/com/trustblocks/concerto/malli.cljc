@@ -29,13 +29,40 @@
   {"StringProperty"   :string
    "BooleanProperty"  :boolean
    "DoubleProperty"   :concerto/double
-   "IntegerProperty"  :int
+   "IntegerProperty"  :concerto/integer
    ;; Long is 64-bit in the spec but only 2^53-safe in Concerto's JS runtime.
    ;; On the JVM it survives as a 64-bit integer; in JavaScript it does not,
    ;; and JSON.parse has already destroyed the value before any validator sees
    ;; it. That loss is only detectable from a platform that does not suffer it.
-   "LongProperty"     :int
+   "LongProperty"     :concerto/integer
    "DateTimeProperty" :concerto/date-time})
+
+(def ^:private end-of-input
+  "Where JavaScript's `$` matches without the `m` flag: the very end, and nowhere
+  else. The JVM's `$` also matches before a final line terminator, so `\"...Z\\n\"`
+  would pass here and fail in Concerto. A lookahead that nothing can follow says
+  the same on both."
+  "(?![\\s\\S])")
+
+(defn js-anchors
+  "A JavaScript pattern for the JVM: its `$` is `end-of-input`, outside a
+  character class, unless the `m` flag makes it a line end. Written the same on
+  both platforms, so a schema reads the same wherever it was compiled."
+  [pattern flags]
+  (if (str/includes? (or flags "") "m")
+    pattern
+    (let [cs (vec pattern)
+          n  (count cs)]
+      (loop [i 0, in-class? false, out []]
+        (if (>= i n)
+          (apply str out)
+          (let [c (cs i)]
+            (cond
+              (and (= c \\) (< (inc i) n)) (recur (+ i 2) in-class? (conj out c (cs (inc i))))
+              (and (= c \[) (not in-class?)) (recur (inc i) true (conj out c))
+              (and (= c \]) in-class?)       (recur (inc i) false (conj out c))
+              (and (= c \$) (not in-class?)) (recur (inc i) in-class? (conj out end-of-input))
+              :else                          (recur (inc i) in-class? (conj out c)))))))))
 
 (def date-time-pattern
   "Concerto's DateTime envelope, as observed rather than as specified.
@@ -61,7 +88,7 @@
         time  (str "(?:" hh "(?::?" nn "(?::?" nn "(?:\\.\\d+)?)?)?)?")
         zone  "(?:Z|[+-](?:[01]\\d|2[0-3]):?[0-5]\\d)?"]
     (re-pattern (str "^(?:" yyyy loose
-                     "|" yyyy "-?" mm "-?" dd "[T ]" time zone ")$"))))
+                     "|" yyyy "-?" mm "-?" dd "[T ]" time zone ")" end-of-input))))
 
 (defn- epoch->iso
   "Whole seconds since the epoch as Concerto writes a DateTime: `2026-07-24T15:00:00Z`."
@@ -82,7 +109,8 @@
   {:gen/schema   [:int {:min 946684800 :max 2524608000}]
    :gen/fmap     epoch->iso
    :json-schema  {:type "string" :format "date-time"
-                  :pattern #?(:clj (.pattern ^java.util.regex.Pattern pattern) :cljs (.-source pattern))}})
+                  :pattern (str/replace #?(:clj (.pattern ^java.util.regex.Pattern pattern) :cljs (.-source pattern))
+                                        end-of-input "$")}})
 
 (def date-time
   "Concerto DateTime, checked on the wire form rather than by parsing.
@@ -115,6 +143,42 @@
         :gen/schema    [:double {:min -1000000.0 :max 1000000.0 :NaN? false :infinite? false}]
         :json-schema   {:type "number"}}
    number?])
+
+(defn- integral?
+  "Whether a JSON number is a whole number, as JavaScript's `Number.isInteger`
+  says: `1.0`, `1e3` and `1e21` are, and so is an integer too large for a long.
+  JSON has one kind of number, and the JVM reads `1.0` as a double and `1e21` as
+  one too, so `:int` would turn away what Concerto takes."
+  [x]
+  #?(:clj  (or (integer? x)
+               (and (float? x) (not (Double/isInfinite (double x))) (== x (Math/floor (double x)))))
+     :cljs (and (number? x) (js/Number.isInteger x))))
+
+(def integer-like
+  "Concerto Integer and Long: any whole number. See `integral?`."
+  [:fn {:error/message "should be an integer"
+        :gen/schema    :int
+        :json-schema   {:type "integer"}}
+   integral?])
+
+(def ^:private js-whitespace
+  "What JavaScript's `trim` takes off, as the inside of a character class."
+  " \\t\\n\\u000b\\f\\r\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff")
+
+(def identifier
+  "An identifier may not be empty: Concerto reads `\"\"` as no identifier at all
+  (\"Missing identifier for Type ...\"), even when `$identifier` is also given.
+  Nor may it be blank: Concerto trims it first, so `\" \"` is missing too, and
+  anything JavaScript's `trim` removes -- a tab, a line break, a no-break space,
+  a byte-order mark. A zero-width space is not one of them, and is an identifier.
+
+  A generator is told what to draw -- a letter and whatever follows -- since it
+  cannot draw from a pattern that says what a string is not."
+  [:and {:gen/schema [:string {:min 1 :max 12}]
+         :gen/fmap   #(str "i" %)}
+   [:string {:min 1}]
+   [:re {:error/message "should not be blank"}
+    (str "[^" js-whitespace "]")]])
 
 (def map-key
   "A map key, which arrives as a keyword once `instance/json->edn` has walked
@@ -156,7 +220,7 @@
   Every shape 3.x accepted and 5.x does not -- a bare year, `20190120`, no
   offset, no seconds, a space for the `T`, a leading `+` -- is covered by the
   test table."
-  #"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$")
+  #"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)(?![\s\S])")
 
 (defn- real-date?
   "Whether the `YYYY-MM-DD` at the front of `s` is a Gregorian date that exists.
@@ -187,6 +251,105 @@
   present or not), `:always`, or `:never`. Bound by `->schema`."
   :random)
 
+(defn- decodes?
+  "Whether JavaScript's `decodeURIComponent` takes `s`: every `%` begins a
+  two-digit escape, and what the escapes spell is UTF-8."
+  [s]
+  #?(:cljs (try (js/decodeURIComponent s) true (catch :default _ false))
+     :clj  (and (not (re-find #"%(?![0-9A-Fa-f]{2})" s))
+                (every? (fn [run]
+                          (let [bytes (byte-array (map #(unchecked-byte (Integer/parseInt % 16))
+                                                       (re-seq #"(?<=%)[0-9A-Fa-f]{2}" run)))]
+                            (try (.decode (doto (.newDecoder java.nio.charset.StandardCharsets/UTF_8)
+                                            (.onMalformedInput java.nio.charset.CodingErrorAction/REPORT)
+                                            (.onUnmappableCharacter java.nio.charset.CodingErrorAction/REPORT))
+                                          (java.nio.ByteBuffer/wrap bytes))
+                                 true
+                                 (catch java.nio.charset.CharacterCodingException _ false))))
+                        (re-seq #"(?:%[0-9A-Fa-f]{2})+" s)))))
+
+(defn- parse-uri
+  "Concerto's own reading of a resource URI (`ResourceId.fromURI`): the fragment
+  after the first `#`, the query after the first `?`, a scheme if what precedes
+  the first `:` looks like one, and an authority after `//`. Nil where Concerto
+  throws -- an authority whose port is not digits."
+  [uri]
+  (let [hash   (str/index-of uri "#")
+        frag   (when hash (let [f (subs uri (inc hash))] (when (seq f) f)))
+        s      (if hash (subs uri 0 hash) uri)
+        qpos   (str/index-of s "?")
+        query  (when qpos (subs s (inc qpos)))
+        s      (if qpos (subs s 0 qpos) s)
+        colon  (when-not (str/starts-with? s "//") (str/index-of s ":"))
+        scheme (when (and colon (re-matches #"(?i)[a-z][a-z0-9.+-]*" (subs s 0 colon)))
+                 (subs s 0 colon))
+        s      (if scheme (subs s (inc colon)) s)
+        base   {:scheme scheme :query query :fragment frag}]
+    (if-not (str/starts-with? s "//")
+      (assoc base :path s)
+      (let [s         (subs s 2)
+            slash     (str/index-of s "/")
+            authority (if slash (subs s 0 slash) s)
+            path      (if slash (subs s slash) "")
+            at        (str/index-of authority "@")
+            userinfo  (when at (subs authority 0 at))
+            hostport  (if at (subs authority (inc at)) authority)
+            pcolon    (str/last-index-of hostport ":")
+            port      (when pcolon (let [p (subs hostport (inc pcolon))] (when (seq p) p)))]
+        (when-not (and port (not (re-matches #"[0-9]+" port)))
+          (assoc base :path path :userinfo userinfo :port port :authority? true))))))
+
+(defn- relationship-value?
+  "Whether `v` is a value Concerto takes for a relationship to one of `types`.
+
+  Concerto reads it as a URI. With a `#`, the part before is the qualified name of
+  a type, which must be one the property may hold -- the declared type or a
+  subtype, not another asset and not a name that is not in the model -- and the
+  rest is the id. Without one, the whole is the id of the declared type, and may
+  not look like another scheme's URI (`urn:x`), carry a query (`a?b`) or an
+  authority's user or port. Either id must decode as a URI component (`100%` does
+  not). An id that is empty is missing.
+
+  Before 5.0 the URI was read by `urijs`, which compares a scheme in the case it
+  is written -- `Resource:` is not `resource:` --, ignores whitespace before the
+  start, reads a fragment of only whitespace as none, and takes `//host` as an id."
+  [{:keys [types uri]} v]
+  (let [new?   (= uri 5)
+        v      (if new? v (str/replace v (re-pattern (str "^[" js-whitespace "]+")) ""))
+        parsed (parse-uri v)]
+    (boolean
+     (and parsed
+          (let [{:keys [scheme query fragment path userinfo port authority?]} parsed
+                ;; and a fragment of only whitespace is no fragment
+                fragment (if (and (not new?) fragment (re-matches (re-pattern (str "[" js-whitespace "]*")) fragment))
+                           nil
+                           fragment)]
+            (and (or (nil? scheme) (= "resource" (if new? (str/lower-case scheme) scheme)))
+                 (not (seq userinfo)) (not port) (not (seq query))
+                 (if fragment
+                   (and (contains? (set types) path) (decodes? fragment))
+                   ;; `urijs` reads `//host` as a URI with an empty path, and
+                   ;; Concerto before 5.0 takes that for an id.
+                   (or (and (seq path) (decodes? path))
+                       (and (not new?) authority?)))))))))
+
+(def relationship
+  "`[:concerto/relationship {:types [...]}]`: the value of a relationship, which is
+  a string Concerto reads as a URI -- see `relationship-value?`. `:types` are the
+  qualified names the property may hold, the declared one and its subtypes,
+  abstract ones included; `:uri` is 5 where Concerto 5's reader applies and 4
+  where `urijs`'s does."
+  (m/-simple-schema
+   {:type            :concerto/relationship
+    :min             0
+    :max             0
+    :type-properties {:error/message "should be a reference to a type this property can hold"
+                      :gen/schema    [:vector {:min 1 :max 12} [:enum "a" "b" "c" "d" "x" "y" "z" "1" "7" "9"]]
+                      :gen/fmap      #(apply str %)
+                      :json-schema   {:type "string" :minLength 1}}
+    :compile         (fn [props _ _]
+                       {:pred (fn [v] (and (string? v) (relationship-value? props v)))})}))
+
 (def registry*
   "Malli registry: the defaults, malli.util's :merge/:select-keys, and the
   Concerto-specific named schemas. Supply this when reading an exported schema
@@ -195,6 +358,9 @@
          (mu/schemas)
          {:concerto/date-time     date-time
           :concerto/double        double-like
+          :concerto/integer       integer-like
+          :concerto/identifier    identifier
+          :concerto/relationship  relationship
           :concerto/map-key       map-key
           :concerto/string-key    string-key
           :concerto/date-time-key date-time-key
@@ -220,8 +386,8 @@
   {"StringScalar"   :string
    "BooleanScalar"  :boolean
    "DoubleScalar"   :concerto/double
-   "IntegerScalar"  :int
-   "LongScalar"     :int
+   "IntegerScalar"  :concerto/integer
+   "LongScalar"     :concerto/integer
    "DateTimeScalar" :concerto/date-time})
 
 (def map-like-declarations
@@ -287,7 +453,10 @@
     ;; flags, and the JVM reads the same thing as an inline flag, so one
     ;; spelling serves both. Concerto tests for a match anywhere in the string,
     ;; which is what Malli's :re does too -- neither anchors.
-    [:re (if (seq flags) (str "(?" flags ")" pattern) pattern)]))
+    ;; Generating draws from the pattern as written: the generator has no lookahead,
+    ;; and a drawn string has no trailing newline to tell the two `$` apart.
+    [:re (let [pattern (if *generators* pattern (js-anchors pattern flags))]
+           (if (seq flags) (str "(?" flags ")" pattern) pattern))]))
 
 (defn- domain-schemas [{:keys [lower upper]}]
   (cond-> []
@@ -412,11 +581,6 @@
           {}
           (sort (keys reg))))
 
-(def ^:private reference
-  "The value of a relationship: the identifier it refers to, which Concerto
-  refuses to leave empty."
-  [:string {:min 1}])
-
 (declare object-schema)
 
 (def ^:private ^:dynamic *version*
@@ -429,6 +593,13 @@
   ([major minor] (at-least? major minor 0))
   ([major minor patch]
    (>= (compare *version* [major minor patch]) 0)))
+
+(defn- reference
+  "The value of a relationship to `fqn`: see `relationship`."
+  [reg fqn]
+  [:concerto/relationship
+   {:types (vec (sort (filter #(some #{fqn} (mm/super-chain reg %)) (keys reg))))
+    :uri   (if (at-least? 5 0) 5 4)}])
 
 (defn- relationship-maps
   "How `map M { o K --> Asset }` values are held, which differs by version in four
@@ -529,11 +700,12 @@
       (case (relationship-maps)
         ;; As a RelationshipProperty: the referenced identifier, a bare id or a
         ;; `resource:` URI -- both strings.
-        :reference reference
+        :reference (reference reg (mm/type-fqn type))
         ;; An embedded resource, as 4.1.3 to 5.1 read it.
         :embedded  (object-schema reg subtypes (mm/type-fqn type) key-fn)
         ;; Either, as 3.23.0 to 4.1.2 do.
-        :either    [:or reference (object-schema reg subtypes (mm/type-fqn type) key-fn)]
+        :either    [:or (reference reg (mm/type-fqn type))
+                    (object-schema reg subtypes (mm/type-fqn type) key-fn)]
         (throw (ex-info (str "Map " (pr-str fqn) " has a relationship value, which "
                              "Concerto before 3.23.0 cannot load. Refusing to emit a schema "
                              "for a model that version rejects.")
@@ -614,9 +786,8 @@
                    "ObjectProperty"
                    (object-schema reg subtypes (mm/type-fqn (:type prop)) key-fn)
                    ;; relationships store the referenced identifier: a bare id or a
-                   ;; `resource:` URI, and never empty (\"Missing id\"). Whether the
-                   ;; URI names a type the property may hold is not checked.
-                   "RelationshipProperty" reference
+                   ;; `resource:` URI, which has to name a type the property may hold.
+                   "RelationshipProperty" (reference reg (mm/type-fqn (:type prop)))
                    nil))]
     ;; No permissive default. An unrecognised property kind used to compile to
     ;; :any, which accepts anything -- so a model this library does not fully
@@ -668,12 +839,11 @@
          (mm/super-chain reg fqn))))
 
 (defn- non-empty
-  "An identifier may not be empty: Concerto reads `\"\"` as no identifier at all
-  (\"Missing identifier for Type ...\"), even when `$identifier` is also given."
+  "A value that is an identifier: see `identifier-string`."
   [schema]
   (if (= :string schema)
-    [:string {:min 1}]
-    [:and schema [:string {:min 1}]]))
+    :concerto/identifier
+    [:and schema :concerto/identifier]))
 
 (defn- system-properties
   "Concerto's `$` properties, admitted where Concerto admits them.
@@ -700,16 +870,27 @@
                ;; Always present when generating: it is valid to say, and a
                ;; generator that may leave it out produces instances that need it.
                [(key-fn "$class") [:= fqn]]
-               ;; Concerto treats a null or empty $class as absent, so the
-               ;; declared type is read in its place.
-               [(key-fn "$class") {:optional true} [:maybe [:enum fqn ""]]])
-             ;; Accepted on any declaration. On an `identified` one, a value that is
-             ;; there may not be empty; leaving it out is fine.
+               ;; Concerto treats a falsy $class -- null, "", 0, false -- as
+               ;; absent, so the declared type is read in its place.
+               [(key-fn "$class") {:optional true}
+                [:or :nil [:enum fqn "" false]
+                 [:and [:or :int :double] [:>= 0] [:<= 0]]]])
+             ;; Accepted on any declaration. On an `identified` one, a value
+             ;; that is there is a non-empty string, or null; on any other, Concerto
+             ;; never reads it, so it may be anything. Leaving it out is fine.
              [(key-fn "$identifier") {:optional true}
-              (if (system-identified? reg fqn) [:string {:min 1}] :string)]]
+              (cond *generators*                 (if (system-identified? reg fqn) :concerto/identifier :string)
+                    (system-identified? reg fqn) [:maybe :concerto/identifier]
+                    :else                        :any)]]
 
+      ;; Concerto does not read a transaction's or event's `$timestamp` either,
+      ;; whatever it is; on any other declaration it refuses the key, null included.
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
-      (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
+      (conj [(key-fn "$timestamp") {:optional true} (if *generators* :concerto/date-time :any)])
+
+      (and (not *generators*) (not (#{"TransactionDeclaration" "EventDeclaration"} kind)))
+      (conj [(key-fn "$timestamp") {:optional true}
+             [:not {:error/message "is not a declared property"} :any]]))))
 
 (def ^:private undeclared
   "What a closed map says of the keys it does not declare: that they are null.
@@ -899,7 +1080,7 @@
                      ;; The registry entries let a nested value omit its
                      ;; $class; the root may not.
                      (if (and (= :ref (first root)) (not *generators*))
-                       [:and [:map [(key-fn "$class") :string]] root]
+                       [:and [:map [(key-fn "$class") [:string {:min 1}]]] root]
                        root)])]
      (m/schema (if (at-least? 5 2)
                  (walk/postwalk-replace {:concerto/date-time :concerto/date-time-strict} form)

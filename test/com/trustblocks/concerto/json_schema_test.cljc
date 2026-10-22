@@ -31,7 +31,7 @@
       (is (str/includes? (pr-str note) "#/definitions/org.accordproject.money@0.3.0.MonetaryAmount")))
 
     (testing "an integer is an integer and an enum is its names"
-      (is (= "integer" (get-in note ["properties" "defaultDays" "type"])))
+      (is (= "integer" (get (definition schema "concerto.integer") "type")))
       (let [amount (definition schema "org.accordproject.money@0.3.0.MonetaryAmount")
             codes  (some #(get % "enum") (tree-seq coll? seq (get-in amount ["properties" "currencyCode"])))]
         (is (some #{"USD"} codes))))))
@@ -76,4 +76,5 @@
   (let [schema (cjs/json-schema (fx/registry "acceptance-of-delivery") fx/acceptance-fqn)]
     (is (= "object" (get schema "type")))
     (is (= {"type" "null"} (get schema "additionalProperties")))
-    (is (nil? (get schema "definitions")) "there is nothing to refer to")))
+    (is (every? #(str/starts-with? % "concerto.") (keys (get schema "definitions")))
+        "there is nothing to refer to but the primitives")))

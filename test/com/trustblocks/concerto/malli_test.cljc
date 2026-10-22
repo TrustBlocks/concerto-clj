@@ -118,8 +118,10 @@
           money (by-key (map-for form "org.accordproject.money@0.3.0.MonetaryAmount"))]
       (is (contains? money :$identifier))
 
-      (testing "but $timestamp is not, on a declaration that cannot carry one"
-        (is (not (contains? money :$timestamp))))))
+      (testing "but $timestamp is not, on a declaration that cannot carry one:
+               Concerto refuses it, null included"
+        (is (= [:not {:error/message "is not a declared property"} :any]
+               (:$timestamp money))))))
 
   (testing "transactions and events do carry $timestamp"
     (let [fqn  "org.accordproject.acceptanceofdelivery@0.1.0.InspectionResponse"
@@ -140,7 +142,7 @@
            A regression guard: accumulating into an array-map silently produces
            an unordered hash-map past eight entries, which made exports of the
            same model differ between runs. This model has seventeen keys."
-    (is (= [:$class :$identifier :clauseId :amount :date :maker :interestRate
+    (is (= [:$class :$identifier :$timestamp :clauseId :amount :date :maker :interestRate
             :individual :makerAddress :lender :legalEntity :lenderAddress
             :principal :maturityDate :defaultDays :insolvencyDays :jurisdiction]
            (schema-keys (map-for (cm/->edn (fx/registry "promissory-note") fx/note-fqn)
@@ -182,7 +184,7 @@
   (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
     (is (= :schema (first form)))
     (testing "the root requires its $class, which a nested value may omit"
-      (is (= [:and [:map [:$class :string]] [:ref fx/note-fqn]] (root-of form))))
+      (is (= [:and [:map [:$class [:string {:min 1}]]] [:ref fx/note-fqn]] (root-of form))))
     (testing "the referenced declaration travels with the schema"
       (is (contains? (:registry (second form))
                      "org.accordproject.money@0.3.0.MonetaryAmount")))
@@ -196,7 +198,7 @@
     (is (= :concerto/date-time (:date by-k)))
     (is (= :concerto/double    (:interestRate by-k)))
     (is (= :string             (:maker by-k)))
-    (is (= :int                (:defaultDays by-k)))
+    (is (= :concerto/integer   (:defaultDays by-k)))
     (is (= :boolean            (:individual by-k)))))
 
 (deftest enums-compile-to-enum
@@ -209,7 +211,8 @@
   (testing "$class is what makes the flattening lossless, so it is an equality
             check, never inferred structurally"
     (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]
-      (is (= [:$class {:optional true} [:maybe [:enum fx/note-fqn ""]]]
+      (is (= [:$class {:optional true}
+              [:or :nil [:enum fx/note-fqn "" false] [:and [:or :int :double] [:>= 0] [:<= 0]]]]
              (first (entries (map-for form fx/note-fqn))))
           "optional in a registry entry, because a nested value may omit it; the
            root's own $class is required by the wrapper around the :ref")
@@ -567,7 +570,7 @@
            produced a closed map with only $class, which rejected the plain
            string a scalar actually is -- a false rejection of valid data."
     (let [by-k (by-key (map-for (cm/->edn validated "v@1.0.0.V") "v@1.0.0.V"))]
-      (is (= [:and :string [:re "^[A-Z]{2}$"]] (:country by-k))))
+      (is (= [:and :string [:re "^[A-Z]{2}(?![\\s\\S])"]] (:country by-k))))
 
     (let [schema (cm/->schema validated "v@1.0.0.V")]
       (is (m/validate schema valid-v))

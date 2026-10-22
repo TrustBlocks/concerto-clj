@@ -210,7 +210,8 @@ is looser than the validator, it says so rather than breaking:
 - A polymorphic property is a `oneOf` over its subtypes. Malli decides by `$class`;
   an instance with none could match a subtype in JSON Schema that Malli refuses.
 - A relationship is a non-empty string. Whether a `resource:` URI names a type the
-  property may hold is checked by Concerto and by neither.
+  property may hold is checked by Concerto and by the validator, and not by JSON
+  Schema.
 
 A property whose declared type has several concrete subtypes compiles to a
 `:multi` dispatching on `$class`, because Concerto permits polymorphism and a
@@ -643,6 +644,40 @@ swapped or dropped, a value nulled). 5,885 agree. The other 115 are understood:
 - 4 are JavaScript coercion: a number where an object is declared
   (`lengthValidator: 5`) populates an object with no properties, so Concerto
   accepts it. This library rejects it.
+
+**Instance validation** was checked by a differential of its own: valid instances of
+every type in the cicero-template-library, each broken at random (a value replaced by
+`null`, a string, a number, an array or a wrapped copy of itself; a property deleted,
+added or swapped with another; a `$class` changed; a string lengthened, cut or given a
+newline) and put to concerto-core 5.2.1's `Serializer` and to this library's schema
+(`script/instance_differential/`). The first run, of 2,160 mutants, disagreed on 161
+and found these, each since matched to what Concerto does on every release from 3.16.7
+to 5.2.1 (or, for relationships, 3.23.0 to 5.2.1):
+
+- `$identifier` is read only on an `identified` declaration, where it is a non-empty
+  string or null; on any other, whatever it holds, it is ignored. `$timestamp` is
+  ignored on a transaction or event, and refused on anything else, null included.
+- A `$class` that is falsy (`null`, `""`, `0`, `false`) is no `$class`: nested, the
+  declared type is read; at the root, it is an error.
+- An Integer or Long is any whole number as JavaScript sees it: `1.0`, `1e3`, `1e21`
+  and an integer too big for a long all are, and JSON writes none of them differently.
+- An identifier is trimmed before it is checked, so `" "`, a tab and a no-break space
+  are missing, and a zero-width space is not.
+- `$` in a pattern, and at the end of a DateTime, does not match before a final
+  newline, as it does on the JVM.
+- A relationship is a URI, read as Concerto reads it: with a `#`, the qualified name
+  before it has to be the declared type or a subtype (an abstract one included),
+  and anything else is an error; without, the value is an id, which may not look like
+  another scheme's URI (`urn:x`), carry a query (`a?b`) or fail to decode (`100%`).
+  Concerto 5 and 4 read it with different parsers, and this library agrees with each on
+  all 3,795 strings of a battery (`relationship_battery.cjs` and `relationship_compare.clj`
+  in the same directory), on 3.23.0, 4.0.0, 4.1.2, 4.1.5 and 5.2.1.
+
+After those, 32,399 of 32,400 mutants (three seeds, 100 per template) agree. The one
+is JavaScript coercion again: a number, a boolean, `""` or `[]` where a concept is
+declared reads as an empty object, so Concerto accepts it if every property is
+optional. This library rejects it. From 5.0.0 an array property given one of them is
+an error, as here.
 
 ## Status
 

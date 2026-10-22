@@ -9,7 +9,8 @@
   property, the DateTime wire form as a `date-time` string, a Concerto map as an
   object with `additionalProperties`. It is plain data with string keys, ready
   to hand to a JSON library."
-  (:require [clojure.walk :as walk]
+  (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [com.trustblocks.concerto.malli :as cm]
             [malli.json-schema :as malli-js]))
 
@@ -45,6 +46,18 @@
        y))
    x))
 
+(defn- restore-dollar
+  "A pattern says `$` in JSON Schema, which is JavaScript's own: the validator
+  writes it as a lookahead so that the JVM, whose `$` also matches before a final
+  newline, agrees with JavaScript, whose does not."
+  [x]
+  (walk/postwalk
+   (fn [y]
+     (if (and (map? y) (string? (get y "pattern")))
+       (update y "pattern" str/replace "(?![\\s\\S])" "$")
+       y))
+   x))
+
 (defn json-schema
   "JSON Schema (draft 7) for the Concerto instance of type `fqn`.
 
@@ -59,4 +72,5 @@
                                 (let [[k v] x] [(->text k) (->text v)])
                                 (->text x)))))
         drop-flagged-patterns
+        restore-dollar
         (assoc "$schema" "http://json-schema.org/draft-07/schema#"))))

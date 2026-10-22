@@ -8,6 +8,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+An instance differential (`script/instance_differential/`: instances of every
+template type, broken at random, put to concerto-core 5.2.1 and to the schema; 2,160
+mutants, 161 disagreements) found the following. Each was checked against every
+release from 3.16.7 to 5.2.1 (relationships from 3.23.0), and 32,399 of 32,400
+mutants now agree.
+
+- `$identifier` is ignored, whatever it holds, on a declaration that is not
+  `identified`; on one that is, it is a non-empty string or null. `$timestamp` is
+  ignored, whatever it holds, on a transaction or event, and refused on any other
+  declaration, null included. Both were checked as strings and dates.
+- A falsy `$class` (`null`, `""`, `0`, `false`) is read as the declared type when
+  nested, and is an error at the root, which accepted `""`.
+- An Integer or Long accepts any whole number (`1.0`, `1e3`, `1e21`, an integer larger
+  than a long), as JavaScript's `Number.isInteger` does. `:int` refused all of them on
+  the JVM, though not under ClojureScript.
+- An identifier is trimmed first: `" "`, a tab, a no-break space and a byte-order
+  mark are missing, as `""` was already.
+- A pattern's `$`, and a DateTime's end, no longer match before a final newline,
+  which the JVM's `$` does and JavaScript's does not: `"...Z\n"` was a valid DateTime.
+- A relationship is read as the URI Concerto reads it. A `resource:` or bare
+  `Type#id` has to name the declared type or a subtype (abstract included), and the
+  rest of the string has to be an id: not another scheme (`urn:x`), not a query
+  (`a?b`), not an undecodable escape (`100%`). Concerto 5 and 4 differ in places
+  (the case of the scheme, whitespace, `//host`), and `:concerto-version` follows
+  them: 3,795 of 3,795 strings agree on each.
 - The CTO parser refuses a default of the wrong kind, as Concerto's does: an Integer
   or Long takes an integer, a Double needs a decimal point (`1.5`, not `1`, `.5` or
   `1e3`), a Boolean `true` or `false`, and a String, DateTime, enum or object a
