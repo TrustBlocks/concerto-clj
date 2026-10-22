@@ -729,7 +729,13 @@
         p)
       ;; validating them
       (for [m models
-            p (concat (import-problems idx m)
+            p (concat ;; `ModelFile.validate` starts with its own decorators, as it
+                      ;; would any declaration's, before it looks at an import. A
+                      ;; model has no name, and Concerto interpolates the missing
+                      ;; one into the message as the word it prints for it.
+                      (decorator-validation-problems idx m m "undefined")
+                      (decorator-problems m)
+                      (import-problems idx m)
                       (duplicate-problems m)
                       (mapcat #(declaration-validate-problems idx m %) (:declarations m)))]
         p))))))

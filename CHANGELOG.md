@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Decorators on the model itself are validated, as on its declarations and
+  properties: under `:decoratorValidation`, one must name a declared type and fit
+  its properties, and a duplicate is always an error. Concerto does the same from
+  3.26.0 to 5.2.1, and starts with them, before the model's imports; its messages
+  name the model's context as `"undefined"`, and so do ours. They were skipped.
 - `:concerto-version` now takes a patch (`"4.1.3"`), because a relationship map
   value changes between 4.1.2 and 4.1.3, and was wrong for 3.23.0 to 4.1.2, which
   take either a `resource:` string or an embedded resource. It had been described

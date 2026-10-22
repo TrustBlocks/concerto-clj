@@ -295,3 +295,54 @@
                             :options {:metamodelValidation true}
                             :validate-on-load (repeat (count models) true)))
           template))))
+
+;; ------------------------------------------------- decorators on the model itself
+
+(defn- decorator [nm & args]
+  {:$class (str mmc "Decorator") :name nm
+   :arguments (vec (for [a args]
+                     (cond (string? a) {:$class (str mmc "DecoratorString") :value a}
+                           (number? a) {:$class (str mmc "DecoratorNumber") :value a})))})
+
+(defn- required [kind nm]
+  {:$class (str mmc kind) :name nm :isArray false :isOptional false})
+
+(def ^:private decorator-concepts
+  [(concept "Hide" :props [(required "StringProperty" "why")])
+   (concept "Count" :props [(required "IntegerProperty" "n")])])
+
+(defn- decorated-model [decorators]
+  (assoc (apply model "m@1.0.0" [] (conj decorator-concepts (concept "A")))
+         :decorators decorators))
+
+(def ^:private validate-decorators {:decoratorValidation {:missingDecorator "error"
+                                                          :invalidDecorator "error"}})
+
+(deftest decorators-on-the-model-are-validated-like-any-others
+  (testing "every message below is what concerto-core says for that model, from
+           3.26.0 to 5.2.1; the model's context prints as the word `undefined`"
+    (let [problem (fn [decorators & {:keys [options] :or {options validate-decorators}}]
+                    (first-problem [(decorated-model decorators)] :options options))]
+      (is (= "Undeclared type \"Nope\" in \"undefined\""
+             (:message (problem [(decorator "Nope" "a")]))))
+      (is (= :DECORATOR_001 (:rule (problem [(decorator "Nope" "a")]))))
+      (is (nil? (problem [(decorator "Hide" "a")])) "a declared one, with the right argument")
+      (is (= "Decorator Count has invalid decorator argument. Expected number. Found string, with value \"x\""
+             (:message (problem [(decorator "Count" "x")]))))
+      (is (= "Decorator Hide has too few arguments. Required properties are: [why]"
+             (:message (problem [(decorator "Hide")]))))
+      (is (= "Decorator Hide has too many arguments. Properties are: [why]"
+             (:message (problem [(decorator "Hide" "a" "b")]))))))
+
+  (testing "without the options, none of that is checked"
+    (is (nil? (first-problem [(decorated-model [(decorator "Nope" "a")])]))))
+
+  (testing "but a duplicate is always an error, options or not"
+    (let [dup [(decorator "Hide" "a") (decorator "Hide" "b")]]
+      (is (= "Duplicate decorator Hide" (:message (first-problem [(decorated-model dup)]))))
+      (is (= :DECORATED_001 (:rule (first-problem [(decorated-model dup)]))))))
+
+  (testing "and it is looked at before the model's imports, as Concerto does"
+    (let [m (assoc (decorated-model [(decorator "Nope" "a")])
+                   :imports [{:$class (str mmc "ImportType") :namespace "zzz@1.0.0" :name "Q"}])]
+      (is (= :DECORATOR_001 (:rule (first-problem [m] :options validate-decorators)))))))
