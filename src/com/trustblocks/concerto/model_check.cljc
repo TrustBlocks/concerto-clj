@@ -89,7 +89,7 @@
   the JVM does not."
   (let [letters "\\p{Lu}|\\p{Ll}|\\p{Lt}|\\p{Lm}|\\p{Lo}|\\p{Nl}|\\$|_|\\\\u[0-9A-Fa-f]{4}"
         source  (str "^(?:" letters ")(?:" letters
-                     "|\\p{Mn}|\\p{Mc}|\\p{Nd}|\\p{Pc}|\\u200C|\\u200D)*$")]
+                     "|\\p{Mn}|\\p{Mc}|\\p{Nd}|\\p{Pc}|\\u200C|\\u200D)*(?![\\s\\S])")]
     #?(:clj  (re-pattern source)
        :cljs (js/RegExp. source "u"))))
 
@@ -251,7 +251,8 @@
   it -- with the flags the platforms agree on (`i`, `m`, `s`)."
   [{:keys [pattern flags]} value]
   (let [on (apply str (filter #{\i \m \s} flags))
-        re (try (re-pattern (if (seq on) (str "(?" on ")" pattern) pattern))
+        re (try (re-pattern (let [pattern (cm/js-anchors pattern flags)]
+                      (if (seq on) (str "(?" on ")" pattern) pattern)))
                 (catch #?(:clj Exception :cljs :default) _ nil))]
     ;; A pattern that does not compile has been reported already, as itself.
     (or (nil? re) (some? (re-find re value)))))
