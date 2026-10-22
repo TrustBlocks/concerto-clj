@@ -40,6 +40,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `generate`'s `:optional` (`:always`, `:never`, `:random`) in the generator and as
+  `->schema`'s `:generators {:optional ...}`, which is what Concerto's
+  `--includeOptionalFields` asks for.
+
 - `com.trustblocks.concerto.generator`: valid sample instances from a model --
   `generate`, `sample`, and a test.check `generator`. Every instance validates
   against the schema compiled for the same type and version; 432 samples across the
