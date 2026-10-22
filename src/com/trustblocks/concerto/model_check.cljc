@@ -467,7 +467,9 @@
       (get-in schema/properties [cls (name (peek in)) 0] "?"))))
 
 (defn- metamodel-error-message [model errors]
-  (let [extra   (filter #(= ::m/extra-key (:type %)) errors)
+  (let [;; A property the metamodel does not declare is a value that is not null,
+        ;; which is all a closed map allows of a key it does not name.
+        extra   (filter #(= :nil (m/type (:schema %))) errors)
         by-node (group-by (comp pop :in) extra)]
     (if (seq extra)
       ;; Properties the metamodel does not declare. All of a node's at once.

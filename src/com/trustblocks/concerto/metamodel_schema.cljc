@@ -373,7 +373,6 @@
  {:registry
   {"concerto.metamodel@1.0.0.Model"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.Model" ""]]]
@@ -428,10 +427,13 @@
     [:decorators
      {:optional true}
      [:maybe
-      [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]],
+      [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.MapValueType"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.MapValueType"]]
     [:$identifier {:optional true} :string]
     [:decorators
@@ -440,26 +442,35 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Import"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.Import"]]
     [:$identifier {:optional true} :string]
     [:namespace :string]
-    [:uri {:optional true} [:maybe :string]]],
+    [:uri {:optional true} [:maybe :string]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ImportAll"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ImportAll" ""]]]
     [:$identifier {:optional true} :string]
     [:namespace :string]
-    [:uri {:optional true} [:maybe :string]]],
+    [:uri {:optional true} [:maybe :string]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.EnumProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.EnumProperty" ""]]]
@@ -471,20 +482,26 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringLengthValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.StringLengthValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:minLength {:optional true} [:maybe :int]]
-    [:maxLength {:optional true} [:maybe :int]]],
+    [:maxLength {:optional true} [:maybe :int]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ParticipantDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -532,10 +549,13 @@
        ["concerto.metamodel@1.0.0.RelationshipProperty"
         [:ref "concerto.metamodel@1.0.0.RelationshipProperty"]]
        ["concerto.metamodel@1.0.0.StringProperty"
-        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]],
+        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DoubleScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DoubleScalar" ""]]]
@@ -552,20 +572,25 @@
     [:defaultValue {:optional true} [:maybe :concerto/double]]
     [:validator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.DoubleDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.DoubleDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.AliasedType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.AliasedType" ""]]]
     [:$identifier {:optional true} :string]
     [:name :string]
-    [:aliasedName :string]],
+    [:aliasedName :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DecoratorNumber"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DecoratorNumber" ""]]]
@@ -573,10 +598,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:value :concerto/double]],
+    [:value :concerto/double]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.StringScalar" ""]]]
@@ -596,11 +624,13 @@
      [:maybe [:ref "concerto.metamodel@1.0.0.StringRegexValidator"]]]
     [:lengthValidator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.StringLengthValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.StringLengthValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.StringMapValueType" ""]]]
@@ -611,10 +641,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DateTimeScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DateTimeScalar" ""]]]
@@ -628,10 +661,13 @@
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
     [:namespace {:optional true} [:maybe :string]]
-    [:defaultValue {:optional true} [:maybe :string]]],
+    [:defaultValue {:optional true} [:maybe :string]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.RelationshipProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -651,10 +687,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]],
+    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DoubleProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DoubleProperty" ""]]]
@@ -676,11 +715,13 @@
     [:defaultValue {:optional true} [:maybe :concerto/double]]
     [:validator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.DoubleDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.DoubleDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ObjectMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ObjectMapValueType" ""]]]
@@ -692,10 +733,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]],
+    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Decorator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.Decorator" ""]]]
@@ -717,10 +761,13 @@
          [:ref "concerto.metamodel@1.0.0.DecoratorTypeReference"]]]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.IntegerScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.IntegerScalar" ""]]]
@@ -737,11 +784,13 @@
     [:defaultValue {:optional true} [:maybe :int]]
     [:validator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.IntegerDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.IntegerDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ObjectProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ObjectProperty" ""]]]
@@ -761,10 +810,13 @@
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
     [:defaultValue {:optional true} [:maybe :string]]
-    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]],
+    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringMapKeyType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.StringMapKeyType" ""]]]
@@ -775,10 +827,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.IntegerProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.IntegerProperty" ""]]]
@@ -800,11 +855,13 @@
     [:defaultValue {:optional true} [:maybe :int]]
     [:validator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.IntegerDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.IntegerDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.StringProperty" ""]]]
@@ -829,29 +886,37 @@
      [:maybe [:ref "concerto.metamodel@1.0.0.StringRegexValidator"]]]
     [:lengthValidator
      {:optional true}
-     [:maybe
-      [:ref "concerto.metamodel@1.0.0.StringLengthValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.StringLengthValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Position"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.Position" ""]]]
     [:$identifier {:optional true} :string]
     [:line :int]
     [:column :int]
-    [:offset :int]],
+    [:offset :int]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DecoratorLiteral"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.DecoratorLiteral"]]
     [:$identifier {:optional true} :string]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.EventDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.EventDeclaration" ""]]]
@@ -898,10 +963,13 @@
        ["concerto.metamodel@1.0.0.RelationshipProperty"
         [:ref "concerto.metamodel@1.0.0.RelationshipProperty"]]
        ["concerto.metamodel@1.0.0.StringProperty"
-        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]],
+        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.LongScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.LongScalar" ""]]]
@@ -918,28 +986,37 @@
     [:defaultValue {:optional true} [:maybe :int]]
     [:validator
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.LongDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.LongDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.IdentifiedBy"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.IdentifiedBy" ""]]]
     [:$identifier {:optional true} :string]
-    [:name :string]],
+    [:name :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ImportType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ImportType" ""]]]
     [:$identifier {:optional true} :string]
     [:namespace :string]
     [:uri {:optional true} [:maybe :string]]
-    [:name :string]],
+    [:name :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DoubleMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DoubleMapValueType" ""]]]
@@ -950,40 +1027,52 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.IntegerDomainValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.IntegerDomainValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:lower {:optional true} [:maybe :int]]
-    [:upper {:optional true} [:maybe :int]]],
+    [:upper {:optional true} [:maybe :int]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.CollectionSizeValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.CollectionSizeValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:minSize {:optional true} [:maybe :int]]
-    [:maxSize {:optional true} [:maybe :int]]],
+    [:maxSize {:optional true} [:maybe :int]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.StringRegexValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.StringRegexValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:pattern :string]
-    [:flags :string]],
+    [:flags :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.MapDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.MapDeclaration" ""]]]
@@ -1023,10 +1112,13 @@
       ["concerto.metamodel@1.0.0.RelationshipMapValueType"
        [:ref "concerto.metamodel@1.0.0.RelationshipMapValueType"]]
       ["concerto.metamodel@1.0.0.StringMapValueType"
-       [:ref "concerto.metamodel@1.0.0.StringMapValueType"]]]]],
+       [:ref "concerto.metamodel@1.0.0.StringMapValueType"]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.MapKeyType"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.MapKeyType"]]
     [:$identifier {:optional true} :string]
     [:decorators
@@ -1035,10 +1127,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ObjectMapKeyType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ObjectMapKeyType" ""]]]
@@ -1050,10 +1145,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]],
+    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DateTimeMapKeyType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DateTimeMapKeyType" ""]]]
@@ -1064,17 +1162,23 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Identified"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.Identified" ""]]]
-    [:$identifier {:optional true} :string]],
+    [:$identifier {:optional true} :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.EnumDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.EnumDeclaration" ""]]]
@@ -1088,10 +1192,13 @@
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
     [:properties
-     [:sequential [:ref "concerto.metamodel@1.0.0.EnumProperty"]]]],
+     [:sequential [:ref "concerto.metamodel@1.0.0.EnumProperty"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.AssetDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.AssetDeclaration" ""]]]
@@ -1138,10 +1245,13 @@
        ["concerto.metamodel@1.0.0.RelationshipProperty"
         [:ref "concerto.metamodel@1.0.0.RelationshipProperty"]]
        ["concerto.metamodel@1.0.0.StringProperty"
-        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]],
+        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Property"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.Property"]]
     [:$identifier {:optional true} :string]
     [:name :string]
@@ -1157,10 +1267,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Declaration"
    [:map
-    {:closed true}
     [:$class [:= "concerto.metamodel@1.0.0.Declaration"]]
     [:$identifier {:optional true} :string]
     [:name :string]
@@ -1170,10 +1283,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.LongMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.LongMapValueType" ""]]]
@@ -1184,10 +1300,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DecoratorString"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DecoratorString" ""]]]
@@ -1195,10 +1314,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:value :string]],
+    [:value :string]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.IntegerMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1210,30 +1332,39 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DoubleDomainValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.DoubleDomainValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:lower {:optional true} [:maybe :concerto/double]]
-    [:upper {:optional true} [:maybe :concerto/double]]],
+    [:upper {:optional true} [:maybe :concerto/double]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.LongDomainValidator"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
       [:enum "concerto.metamodel@1.0.0.LongDomainValidator" ""]]]
     [:$identifier {:optional true} :string]
     [:lower {:optional true} [:maybe :int]]
-    [:upper {:optional true} [:maybe :int]]],
+    [:upper {:optional true} [:maybe :int]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DateTimeMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1245,10 +1376,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.BooleanMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1260,10 +1394,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.LongProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.LongProperty" ""]]]
@@ -1285,20 +1422,26 @@
     [:defaultValue {:optional true} [:maybe :int]]
     [:validator
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.LongDomainValidator"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.LongDomainValidator"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.Range"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.Range" ""]]]
     [:$identifier {:optional true} :string]
     [:start [:ref "concerto.metamodel@1.0.0.Position"]]
     [:end [:ref "concerto.metamodel@1.0.0.Position"]]
-    [:source {:optional true} [:maybe :string]]],
+    [:source {:optional true} [:maybe :string]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DecoratorTypeReference"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1308,10 +1451,13 @@
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
     [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
-    [:isArray {:optional true} [:maybe :boolean]]],
+    [:isArray {:optional true} [:maybe :boolean]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DateTimeProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DateTimeProperty" ""]]]
@@ -1329,10 +1475,13 @@
       [:sequential [:ref "concerto.metamodel@1.0.0.Decorator"]]]]
     [:location
      {:optional true}
-     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]],
+     [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.TransactionDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1380,10 +1529,13 @@
        ["concerto.metamodel@1.0.0.RelationshipProperty"
         [:ref "concerto.metamodel@1.0.0.RelationshipProperty"]]
        ["concerto.metamodel@1.0.0.StringProperty"
-        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]],
+        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.DecoratorBoolean"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.DecoratorBoolean" ""]]]
@@ -1391,20 +1543,26 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:value :boolean]],
+    [:value :boolean]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.TypeIdentifier"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.TypeIdentifier" ""]]]
     [:$identifier {:optional true} :string]
     [:name :string]
     [:namespace {:optional true} [:maybe :string]]
-    [:resolvedName {:optional true} [:maybe :string]]],
+    [:resolvedName {:optional true} [:maybe :string]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.BooleanScalar"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.BooleanScalar" ""]]]
@@ -1418,10 +1576,13 @@
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
     [:namespace {:optional true} [:maybe :string]]
-    [:defaultValue {:optional true} [:maybe :boolean]]],
+    [:defaultValue {:optional true} [:maybe :boolean]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.BooleanProperty"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.BooleanProperty" ""]]]
@@ -1440,10 +1601,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:defaultValue {:optional true} [:maybe :boolean]]],
+    [:defaultValue {:optional true} [:maybe :boolean]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ImportTypes"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ImportTypes" ""]]]
@@ -1454,10 +1618,13 @@
     [:aliasedTypes
      {:optional true}
      [:maybe
-      [:sequential [:ref "concerto.metamodel@1.0.0.AliasedType"]]]]],
+      [:sequential [:ref "concerto.metamodel@1.0.0.AliasedType"]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.RelationshipMapValueType"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe
@@ -1470,10 +1637,13 @@
     [:location
      {:optional true}
      [:maybe [:ref "concerto.metamodel@1.0.0.Range"]]]
-    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]],
+    [:type [:ref "concerto.metamodel@1.0.0.TypeIdentifier"]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]],
    "concerto.metamodel@1.0.0.ConceptDeclaration"
    [:map
-    {:closed true}
     [:$class
      {:optional true}
      [:maybe [:enum "concerto.metamodel@1.0.0.ConceptDeclaration" ""]]]
@@ -1520,7 +1690,11 @@
        ["concerto.metamodel@1.0.0.RelationshipProperty"
         [:ref "concerto.metamodel@1.0.0.RelationshipProperty"]]
        ["concerto.metamodel@1.0.0.StringProperty"
-        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]]}}
+        [:ref "concerto.metamodel@1.0.0.StringProperty"]]]]]
+    [:malli.core/default
+     [:map-of
+      :any
+      [:nil #:error{:message "is not a declared property"}]]]]}}
  [:and
   [:map [:$class :string]]
   [:ref "concerto.metamodel@1.0.0.Model"]]]

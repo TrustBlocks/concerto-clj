@@ -64,15 +64,16 @@ are both legal EDN keywords that read back identically, so names like
 (cm/->edn reg "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel")
 ;; =>
 ;; [:map
-;;  {:closed true}
 ;;  [:$class [:= "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel"]]
 ;;  [:$identifier {:optional true} :string]
-;;  [:clauseId :string]
+;;  [:clauseId [:string {:min 1}]]
 ;;  [:shipper :string]
 ;;  [:receiver :string]
 ;;  [:deliverable :string]
 ;;  [:businessDays :int]
-;;  [:attachment :string]]
+;;  [:attachment :string]
+;;  [:malli.core/default
+;;   [:map-of :any [:nil {:error/message "is not a declared property"}]]]]
 ```
 
 That is plain EDN — no functions, no `#object[...]` — so it can be written to a
@@ -88,23 +89,30 @@ itself terminates:
 
 ```clojure
 [:schema {:registry {"org.accordproject.money@0.3.0.MonetaryAmount"
-                     [:map {:closed true}
+                     [:map
                       [:$class [:= "org.accordproject.money@0.3.0.MonetaryAmount"]]
                       [:doubleValue :concerto/double]
-                      [:currencyCode [:enum "AED" "AFN" ...]]]
+                      [:currencyCode [:enum "AED" "AFN" ...]]
+                      [:malli.core/default [:map-of :any [:nil ...]]]]
                      "org.accordproject.promissorynote@0.2.0.TemplateModel"
-                     [:map {:closed true}
+                     [:map
                       ...
-                      [:amount [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]]]}}
+                      [:amount [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]]
+                      [:malli.core/default [:map-of :any [:nil ...]]]]}}
  [:ref "org.accordproject.promissorynote@0.2.0.TemplateModel"]]
 ```
 
 A model with nothing nested emits as a plain map, as above.
 
-Maps are closed, matching Concerto, which rejects undeclared properties. Pass
-`:closed false` if the values being validated legitimately carry extra keys,
-though a storage adapter should strip its own derived keys instead — that way
-the guarantee this library offers is the one Concerto offers.
+Maps are closed, matching Concerto, which rejects undeclared properties. The last
+entry of each map is what closes it: Malli's default entry, which is the schema for
+every key the map does not name, and here allows only `null`. Concerto ignores an
+undeclared property whose value is `null` (in 4.2.0, 5.0.0, 5.1.0 and 5.2.1, at any
+depth) and rejects any other, so `{:closed true}`, which refuses a key whatever its
+value, would turn away an instance Concerto accepts. Pass `:closed false` if the
+values being validated legitimately carry extra keys, though a storage adapter
+should strip its own derived keys instead — that way the guarantee this library
+offers is the one Concerto offers.
 
 ### Which Concerto
 
@@ -609,7 +617,7 @@ specifications and in `fixtures/` (source locations included), which it accepts
 apart from the six built to be malformed; and by a differential against concerto-core
 5.2.1's `MetaModel.validateMetaModel` over 6,000 seeded random mutations of those
 ASTs (`script/metamodel_differential/`) (a key deleted, a value of the wrong type, a property added, a `$class`
-swapped or dropped, a value nulled). 5,884 agree. The other 116 are understood:
+swapped or dropped, a value nulled). 5,885 agree. The other 115 are understood:
 
 - 111 are the identifier regex. The metamodel puts JavaScript's `u`-flag identifier
   regex on three `name` properties, which the compiler refuses to emit because the
@@ -619,9 +627,6 @@ swapped or dropped, a value nulled). 5,884 agree. The other 116 are understood:
 - 4 are JavaScript coercion: a number where an object is declared
   (`lengthValidator: 5`) populates an object with no properties, so Concerto
   accepts it. This library rejects it.
-- 1 is an undeclared property whose value is `null`, which Concerto ignores and a
-  closed map here rejects. It is not specific to the metamodel: the same holds for
-  any instance, and is a known small false rejection.
 
 ## Status
 

@@ -701,6 +701,17 @@
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
       (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
 
+(def ^:private undeclared
+  "What a closed map says of the keys it does not declare: that they are null.
+  Concerto rejects an undeclared property, but ignores one whose value is null --
+  in every version checked, at any depth -- so `{:closed true}`, which rejects a
+  key whatever its value, would refuse an instance Concerto accepts.
+
+  Malli's default entry is the schema for every key not otherwise named, and
+  `:nil` leaves nothing else through. It is also what JSON Schema calls
+  `additionalProperties: {type: null}`, which is the same rule."
+  [::m/default [:map-of :any [:nil {:error/message "is not a declared property"}]]])
+
 (defn- declaration->map
   "One declaration as a map schema, with its whole inheritance chain flattened
   into it, parents first."
@@ -725,9 +736,12 @@
                         [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]])
                       [k (cond-> (property->schema reg subtypes prop key-fn)
                            (= id-field (:name prop)) non-empty)])))]
-    (into (into [:map (cond-> {} closed (assoc :closed true))]
+    ;; Generating, a map that tolerates extra keys would be drawn with junk ones,
+    ;; so it stays plain closed there: only validation needs to tolerate a null.
+    (into (into [:map (cond-> {} (and closed *generators*) (assoc :closed true))]
                 (system-properties reg fqn key-fn root?))
-          (ordered (remove nil? entries)))))
+          (cond-> (vec (ordered (remove nil? entries)))
+            (and closed (not *generators*)) (conj undeclared)))))
 
 (defn- inline-kind?
   "Kinds that compile in place of being referenced, so need no registry entry."
@@ -805,7 +819,8 @@
 (defn ->schema
   "Compile a Malli schema for a `$class`, flattening its whole inheritance chain.
 
-  Maps are closed, matching Concerto, which rejects undeclared properties. Pass
+  Maps are closed, matching Concerto, which rejects undeclared properties -- and
+  ignores one whose value is null, so a closed map says the same. Pass
   `:closed false` only if the values being validated legitimately carry extra
   keys -- a storage adapter should strip its own derived keys instead, so that
   the guarantee this library offers is the one Concerto offers.

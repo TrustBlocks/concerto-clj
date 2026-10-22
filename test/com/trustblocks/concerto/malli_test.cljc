@@ -19,7 +19,10 @@
     (get (:registry (second form)) fqn)
     form))
 
-(defn- entries     [map-form] (filterv vector? (drop 1 map-form)))
+(defn- entries
+  "A map schema's property entries: not the default entry that closes it."
+  [map-form]
+  (filterv #(and (vector? %) (not= :malli.core/default (first %))) (drop 1 map-form)))
 (defn- schema-keys [map-form] (mapv first (entries map-form)))
 (defn- by-key      [map-form] (into {} (map (juxt first last)) (entries map-form)))
 
@@ -72,7 +75,7 @@
                (why {:$class money :currencyCode "USD"}))))
 
       (testing "an undeclared property on the nested concept"
-        (is (= {:amount {:totalNonsense ["disallowed key"]}}
+        (is (= {:amount {:totalNonsense ["is not a declared property"]}}
                (why {:$class money :doubleValue 1 :currencyCode "USD"
                      :totalNonsense true}))))
 
@@ -89,8 +92,20 @@
         instance (inst/json->edn (fx/sample "promissory-note"))]
 
     (testing "Concerto rejects undeclared properties, so this does too"
-      (is (= {:notADeclaredField ["disallowed key"]}
+      (is (= {:notADeclaredField ["is not a declared property"]}
              (me/humanize (m/explain schema (assoc instance :notADeclaredField "surprise"))))))
+
+    (testing "but ignores one whose value is null, as Concerto does: in 4.2.0,
+             5.0.0, 5.1.0 and 5.2.1, at the top level and nested"
+      (is (m/validate schema (assoc instance :notADeclaredField nil)))
+      (is (m/validate schema (assoc-in instance [:amount :notADeclaredField] nil)))
+      (is (not (m/validate schema (assoc instance :notADeclaredField false))) "false is not null")
+      (is (not (m/validate schema (assoc instance :notADeclaredField ""))) "nor is an empty string")
+      (is (not (m/validate schema (assoc-in instance [:amount :notADeclaredField] 1)))))
+
+    (testing "and a missing required property is still missing, null or not"
+      (is (not (m/validate schema (assoc instance :maker nil))))
+      (is (not (m/validate schema (dissoc instance :maker)))))
 
     (testing "closed can be turned off for callers who need it"
       (let [open (cm/->schema (fx/registry "promissory-note") fx/note-fqn :closed false)]
@@ -159,7 +174,9 @@
   (testing "nothing nested to reference, so no registry wrapper is emitted"
     (let [form (cm/->edn (fx/registry "acceptance-of-delivery") fx/acceptance-fqn)]
       (is (= :map (first form)))
-      (is (= {:closed true} (second form))))))
+      (testing "closed by a default entry that allows only null, last"
+        (is (= [:malli.core/default [:map-of :any [:nil {:error/message "is not a declared property"}]]]
+               (last form)))))))
 
 (deftest nested-models-emit-refs
   (let [form (cm/->edn (fx/registry "promissory-note") fx/note-fqn)]

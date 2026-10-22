@@ -20,9 +20,10 @@
     (testing "the root requires its $class, which Malli draws from the model"
       (is (some #(= ["$class"] (get % "required")) (get schema "allOf"))))
 
-    (testing "the type is an object that is closed, as Concerto's are"
+    (testing "the type is an object that is closed, as Concerto's are -- to
+             everything but null, which Concerto ignores"
       (is (= "object" (get note "type")))
-      (is (false? (get note "additionalProperties")))
+      (is (= {"type" "null"} (get note "additionalProperties")))
       (is (seq (get note "required"))))
 
     (testing "what it refers to travels with it"
@@ -74,5 +75,5 @@
 (deftest a-model-with-nothing-nested-is-the-object-itself
   (let [schema (cjs/json-schema (fx/registry "acceptance-of-delivery") fx/acceptance-fqn)]
     (is (= "object" (get schema "type")))
-    (is (false? (get schema "additionalProperties")))
+    (is (= {"type" "null"} (get schema "additionalProperties")))
     (is (nil? (get schema "definitions")) "there is nothing to refer to")))

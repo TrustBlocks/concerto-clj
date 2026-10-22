@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An undeclared property whose value is `null` is ignored, as Concerto does (4.2.0,
+  5.0.0, 5.1.0 and 5.2.1, at any depth); it was rejected. Any other value is still
+  rejected, and `false`, `""` and `0` are not null. A closed map is now closed by
+  Malli's default entry, which allows only `null`, in place of `{:closed true}`, so
+  the emitted form differs, and the JSON Schema is `additionalProperties:
+  {type: null}`, which is the same rule. Generation keeps the plain closed map.
+  Settles the one remaining disagreement in the metamodel differential (5,885 of
+  6,000 now agree).
 - An identifier may not be empty. Concerto reads `""` as no identifier ("Missing
   identifier for Type ..."): for an `identified by` field, even when `$identifier`
   is also given, and for a system `$identifier` that is present. Both were
