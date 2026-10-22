@@ -7,6 +7,9 @@
 
     cto-test     JVM and babashka only -- it shells out to Accord's CLI.
 
+    cli-test     JVM and babashka only: the command line is Clojure, for babashka
+                 first. It runs `bb` itself in a few tests.
+
     generator-test, generator-parsed-test
                  JVM only (generator-test also runs under babashka): sample
                  generation needs test.check, and test.chuck for a regex, which
@@ -50,6 +53,7 @@
                          'com.trustblocks.concerto.conformance-test
                          'com.trustblocks.concerto.json-schema-test
                          'com.trustblocks.concerto.generator-test
+                         'com.trustblocks.concerto.cli-test
                          'com.trustblocks.concerto.cto-test]
                   (not babashka?) (conj 'com.trustblocks.concerto.conformance-validate-test
                                        'com.trustblocks.concerto.malli-parsed-test

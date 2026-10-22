@@ -19,9 +19,19 @@
   {:extra-deps {org.clojure/test.check       {:mvn/version "1.1.1"}
                 com.gfredericks/test.chuck {:mvn/version "0.2.15"}}}
 
+  ;; clojure -M:cli validate --input sample.json --model model/
+  ;; Only for running the command line on the JVM, which parses .cto in-process;
+  ;; under babashka it needs none of this (see bb.edn).
+  :cli
+  {:extra-deps {org.babashka/cli            {:mvn/version "0.8.65"}
+                org.clojure/test.check       {:mvn/version "1.1.1"}
+                com.gfredericks/test.chuck {:mvn/version "0.2.15"}}
+   :main-opts  ["-m" "com.trustblocks.concerto.cli"]}
+
   :test  {:extra-paths ["test" "test-resources"]
           :extra-deps  {org.clojure/test.check       {:mvn/version "1.1.1"}
-                        com.gfredericks/test.chuck {:mvn/version "0.2.15"}}
+                        com.gfredericks/test.chuck {:mvn/version "0.2.15"}
+                        org.babashka/cli            {:mvn/version "0.8.65"}}
           :main-opts   ["-m" "com.trustblocks.concerto.test-runner"]}
 
   ;; clojure -M:cljs-test

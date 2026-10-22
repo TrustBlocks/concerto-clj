@@ -40,6 +40,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `com.trustblocks.concerto.cli`, and `concerto-clj` for bbin (`bb cli ...`, or
+  `clojure -M:cli ...` on the JVM): `validate`, `check`, `generate`, `schema` and
+  `parse`, with Concerto's flags where the command exists. Exit status 0, 1 for a
+  finding, 2 for a mistake, which Concerto's own `validate` does not give. Under
+  babashka a validation takes 0.16s against Concerto's 0.56s; a `.cto` is parsed by
+  Accord's CLI and cached by content. Agrees with `concerto validate` on all 108
+  cicero-template-library instances, at versions 4 and 5.2
+  (`script/sample_differential/compare_cli.sh`).
 - `generate`'s `:optional` (`:always`, `:never`, `:random`) in the generator and as
   `->schema`'s `:generators {:optional ...}`, which is what Concerto's
   `--includeOptionalFields` asks for.
