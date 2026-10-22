@@ -140,6 +140,11 @@ closed schema for the parent alone would reject a legitimate subclass:
  ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
 ```
 
+An optional property compiles to `[:k {:optional true} [:maybe schema]]`: Concerto
+treats an explicit `null` on an optional property as absent (and `concerto
+validate` drops it), so the schema does too. A `null` on a required property is
+still a missing field, and a `null` inside an array is still an error.
+
 Validators are enforced. `regex`, `length` and `range` compile to Malli
 constraints, and scalar declarations inline as their underlying primitive with
 their own constraints applied:

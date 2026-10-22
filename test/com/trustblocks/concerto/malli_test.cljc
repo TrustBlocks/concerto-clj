@@ -830,3 +830,39 @@
       (let [revived (m/schema (edn/read-string (pr-str form)) {:registry cm/registry*})]
         (is (m/validate revived {:$class "m@1.0.0.H" :c {:US "s"}}))
         (is (not (m/validate revived {:$class "m@1.0.0.H" :c {:USA "s"}})))))))
+
+;; ------------------------------------------------------------ null / optional
+
+(def ^:private nulls-reg
+  "Every expectation below was run through `concerto validate` (core 5.2.1)."
+  (mm/registry
+   [(p/parse-string
+     (str "namespace n@1.0.0\n"
+          "enum Colour { o RED o BLUE }\n"
+          "concept Item { o String n }\n"
+          "concept N {\n"
+          " o String req\n o String os optional\n o Integer oi optional\n"
+          " o DateTime od optional\n o Boolean ob optional\n o Colour oc optional\n"
+          " o Item oitem optional\n o String[] oarr optional\n o String[] rarr\n"
+          " o Item[] oitems optional\n}\n"))]))
+
+(defn- n-ok? [extra]
+  (m/validate (cm/->schema nulls-reg "n@1.0.0.N")
+              (inst/json->edn (merge {"$class" "n@1.0.0.N" "req" "a" "rarr" []} extra))))
+
+(deftest null-on-an-optional-property-means-absent
+  (testing "Concerto drops it, whatever the property's kind"
+    (doseq [k ["os" "oi" "od" "ob" "oc" "oitem" "oarr" "oitems"]]
+      (is (n-ok? {k nil}) k)))
+
+  (testing "but a null is not a value of the property's type"
+    (is (not (n-ok? {"os" 5})))
+    (is (not (n-ok? {"oi" "x"}))))
+
+  (testing "a required property's null is a missing field"
+    (is (not (n-ok? {"req" nil})))
+    (is (not (n-ok? {"rarr" nil}))))
+
+  (testing "and a null inside an array is still an error"
+    (is (not (n-ok? {"oarr" ["a" nil]})))
+    (is (not (n-ok? {"oitems" [nil]})))))

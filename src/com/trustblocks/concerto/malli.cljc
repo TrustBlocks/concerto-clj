@@ -538,7 +538,12 @@
                       prop (:properties (declaration-of reg f))]
                   (let [k (key-fn (:name prop))]
                     (if (:isOptional prop)
-                      [k {:optional true} (property->schema reg subtypes prop key-fn)]
+                      ;; An explicit null on an optional property means the
+                      ;; same as leaving it out -- `concerto validate` accepts
+                      ;; `"deliveredAt": null` and drops it. Only the property
+                      ;; itself: a null *inside* an array is still an error, and
+                      ;; a required property's null is a missing field.
+                      [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]]
                       [k (property->schema reg subtypes prop key-fn)])))]
     (into (into [:map (cond-> {} closed (assoc :closed true))]
                 (system-properties reg fqn key-fn))

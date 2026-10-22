@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An explicit `null` on an optional property is accepted, as Concerto does, and
+  no longer rejected as the wrong type. It was the only disagreement with the
+  CLI across the 108 sample and request instances in the cicero-template-library
+  (five `latedeliveryandpenalty*` requests carrying `"deliveredAt": null`).
 - The CTO parser spelled every map key and value type `Object*Type`; it now
   emits `StringMapKeyType`, `IntegerMapValueType` and the rest, as the CLI does.
 
