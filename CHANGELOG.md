@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An identifier may not be empty. Concerto reads `""` as no identifier ("Missing
+  identifier for Type ..."): for an `identified by` field, even when `$identifier`
+  is also given, and for a system `$identifier` that is present. Both were
+  accepted. The same on 4.2.0, 5.0.0, 5.1.0 and 5.2.1.
+- A relationship may not be empty ("Missing id"), as a property, an array element
+  or a map value. The same on 4.2.0, 5.0.0, 5.1.0 and 5.2.1. Whether a `resource:`
+  URI names a type the property may hold is still not checked.
 - A nested concrete concept with a `null` or empty `$class` is read as the
   declared type, as Concerto does. It was rejected.
 - `:concerto-version 5` was the strict mode, and it should not have been: 5.0 and
@@ -32,6 +39,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   emits `StringMapKeyType`, `IntegerMapValueType` and the rest, as the CLI does.
 
 ### Added
+
+- `com.trustblocks.concerto.generator`: valid sample instances from a model --
+  `generate`, `sample`, and a test.check `generator`. Every instance validates
+  against the schema compiled for the same type and version; 432 samples across the
+  cicero-template-library were also all accepted by concerto-core 5.2.1.
+- `com.trustblocks.concerto.json-schema`: a model as JSON Schema (draft 7), from
+  the same compiled schema, so the two agree: 2,592 of 2,592 mutated instances,
+  through Ajv.
+- `->schema` `:generators true`, which annotates the schema for generation without
+  changing what it accepts; and generator and JSON Schema properties on the named
+  schemas (`:concerto/date-time`, `:concerto/double`, ...), which change nothing
+  and need no new dependency until something generates.
+- The `:generators` alias in `deps.edn`: test.check and test.chuck.
+- `script/sample_differential/`: the two differentials above, reproducibly.
 
 - `com.trustblocks.concerto.model-check`: Concerto's model-level validation, as
   `check` (problems as data, with the rule id and exception class) and `check!`

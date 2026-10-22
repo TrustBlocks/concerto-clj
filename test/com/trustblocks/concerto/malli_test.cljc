@@ -4,6 +4,7 @@
             [clojure.test :refer [deftest is testing]]
             [com.trustblocks.concerto.fixtures :as fx]
             [com.trustblocks.concerto.instance :as inst]
+            [com.trustblocks.concerto.json-schema :as cjs]
             [com.trustblocks.concerto.malli :as cm]
             [com.trustblocks.concerto.metamodel :as mm]
             [malli.core :as m]
@@ -678,3 +679,23 @@
                         (assoc sample :date "2019-01-20"))))
       (doseq [v ["5.2" "5.2.1" "5.9"]]
         (is (not (m/validate (at v) (assoc sample :date "2019"))) (str "strict at " v))))))
+
+;; -------------------------------------------------------------- json schema
+
+(deftest validators-reach-the-json-schema
+  (testing "a regex, a length and a range each become what JSON Schema calls them"
+    (let [schema (cjs/json-schema validated "v@1.0.0.V")
+          ;; nothing nested, so the object is the schema itself
+          props  (get schema "properties")]
+      (is (= "^[A-Z]{3}$" (get (some #(when (and (map? %) (get % "pattern")) %) (tree-seq coll? seq (get props "code"))) "pattern")))
+      (is (str/includes? (pr-str (get props "label")) "\"minLength\" 1"))
+      (is (str/includes? (pr-str (get props "label")) "\"maxLength\" 10"))
+      (is (str/includes? (pr-str (get props "icount")) "\"minimum\" 0"))
+      (is (str/includes? (pr-str (get props "icount")) "\"maximum\" 100"))))
+
+  (testing "a regex with flags is left out, with a note: JavaScript has no inline
+           flags, and a pattern a validator cannot read would sink the schema"
+    (let [props (get-in (cjs/json-schema validated "v@1.0.0.V") ["properties" "ci"])
+          text  (pr-str props)]
+      (is (not (str/includes? text "(?i)^abc$\"}")) "no pattern is emitted for it")
+      (is (str/includes? text "$comment")))))

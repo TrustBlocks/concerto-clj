@@ -139,6 +139,56 @@ fixtures and registry do not depend on the choice.
 deliberately returns to the 5.0 behavior for `--> Asset` map values, so that
 cell may move again.)
 
+### Sample instances and JSON Schema
+
+The compiled schema can do more than validate. Two namespaces use it:
+
+```clojure
+(require '[com.trustblocks.concerto.generator :as g]
+         '[com.trustblocks.concerto.json-schema :as cjs])
+
+(g/generate reg fqn :seed 7)       ; one valid instance, as Concerto JSON
+(g/sample reg fqn 20)              ; twenty, growing in size
+(g/generator reg fqn)              ; a test.check generator, for property tests
+(cjs/json-schema reg fqn)          ; JSON Schema (draft 7), as plain data
+```
+
+Both take `:concerto-version`. Every instance generated validates against the
+schema `->schema` compiles for the same type and version; that is tested on every
+model in the suite, and checked against concerto-core as well: 432 samples (every
+template type in the cicero-template-library, four each) were all accepted by
+`concerto validate` 5.2.1, from `script/sample_differential/`.
+
+Generation needs `org.clojure/test.check`, and a String with a `regex` validator
+also `com.gfredericks/test.chuck`, which covers character classes, quantifiers and
+groups but not inline flags, lookahead or `\p{..}`. The `:generators` alias in
+`deps.edn` lists both. test.chuck is not available under babashka, so there a
+regex-constrained String does not generate, and fails with an error saying so;
+everything else does. What is generated is deliberately unremarkable: times
+between 2000 and 2050 as `2026-07-24T15:00:00Z`, doubles within a million, a
+relationship as a bare identifier, never a null (an optional property is present or
+left out), and `$class` always present, as exactly the class. A pattern, a length
+or a range is generated from, not filtered to, so a tight one does not give up.
+Those are written into the schema when you pass `->schema` `:generators true`; the
+schema you validate with stays plain.
+
+`json-schema` is Malli's export of the same schema, not Concerto's own
+`compile --target jsonschema`, and the two are not the same document. Because it
+comes from the validator, the two cannot drift: the JSON Schema accepted all 324
+valid samples and agreed with the Malli validator on 2,592 of 2,592 randomly
+mutated instances, when run through Ajv (`script/sample_differential/`). Where it
+is looser than the validator, it says so rather than breaking:
+
+- A regex with flags (`/abc/i`) has no JSON Schema form, since JavaScript has no
+  inline flags, so its `pattern` is left out with a `$comment`.
+- A DateTime is a `date-time` string with its pattern. The strict mode's check that
+  the day exists (`2019-02-30`) is code, not a pattern, so JSON Schema does not
+  have it.
+- A polymorphic property is a `oneOf` over its subtypes. Malli decides by `$class`;
+  an instance with none could match a subtype in JSON Schema that Malli refuses.
+- A relationship is a non-empty string. Whether a `resource:` URI names a type the
+  property may hold is checked by Concerto and by neither.
+
 A property whose declared type has several concrete subtypes compiles to a
 `:multi` dispatching on `$class`, because Concerto permits polymorphism and a
 closed schema for the parent alone would reject a legitimate subclass:

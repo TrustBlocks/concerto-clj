@@ -309,3 +309,66 @@
   (is (c-ok? "c@1.0.0.WithDefault" {"$class" "c@1.0.0.WithDefault" "s" "x"}))
   (testing "but what is given is still checked"
     (is (not (c-ok? "c@1.0.0.WithDefault" {"$class" "c@1.0.0.WithDefault" "s" 5})))))
+
+;; ------------------------------------------------------------------ identifiers
+
+(def ^:private id-reg
+  "Every expectation below was run through concerto-core 4.2.0, 5.0.0, 5.1.0 and 5.2.1,
+  which agree."
+  (mm/registry
+   [(p/parse-string
+     (str "namespace i@1.0.0\n"
+          "asset A identified by id { o String id  o String n optional }\n"
+          "concept S identified { o String n optional }\n"
+          "participant P identified by pid { o String pid }\n"
+          "concept C { o String n }\n"
+          "concept H { o A a optional  o S s optional }\n"))]))
+
+(defn- i-ok? [fqn data]
+  (m/validate (cm/->schema id-reg (str "i@1.0.0." fqn)) (inst/json->edn data)))
+
+(deftest an-identifier-may-not-be-empty
+  (testing "identified by a field: the field is the identifier, and \"\" is none"
+    (is (i-ok? "A" {"$class" "i@1.0.0.A" "id" "x"}))
+    (is (not (i-ok? "A" {"$class" "i@1.0.0.A" "id" ""})))
+    (is (not (i-ok? "A" {"$class" "i@1.0.0.A"})) "and it is required, as ever")
+    (is (not (i-ok? "A" {"$class" "i@1.0.0.A" "id" "" "$identifier" "x"}))
+        "a $identifier does not stand in for it")
+    (is (not (i-ok? "P" {"$class" "i@1.0.0.P" "pid" ""}))))
+
+  (testing "$identifier beside an identifying field is its own affair"
+    (is (i-ok? "A" {"$class" "i@1.0.0.A" "id" "x" "$identifier" "y"}) "it need not agree")
+    (is (i-ok? "A" {"$class" "i@1.0.0.A" "id" "x" "$identifier" ""})))
+
+  (testing "`identified` by the system: $identifier, if given, is not empty, and may be left out"
+    (is (i-ok? "S" {"$class" "i@1.0.0.S" "$identifier" "x"}))
+    (is (not (i-ok? "S" {"$class" "i@1.0.0.S" "$identifier" ""})))
+    (is (i-ok? "S" {"$class" "i@1.0.0.S"})))
+
+  (testing "a type that is not identified takes any $identifier"
+    (is (i-ok? "C" {"$class" "i@1.0.0.C" "n" "a" "$identifier" ""})))
+
+  (testing "nested, the same"
+    (is (not (i-ok? "H" {"$class" "i@1.0.0.H" "a" {"id" ""}})))
+    (is (i-ok? "H" {"$class" "i@1.0.0.H" "a" {"id" "x"}}))
+    (is (i-ok? "H" {"$class" "i@1.0.0.H" "s" {"n" "x"}}))))
+
+(def ^:private rel-reg
+  "Every expectation below was run through concerto-core 4.2.0, 5.0.0, 5.1.0 and 5.2.1,
+  which agree."
+  (mm/registry
+   [(p/parse-string
+     (str "namespace r@1.0.0\n"
+          "asset A identified by id { o String id }\n"
+          "concept H { --> A a optional\n --> A[] as optional }\n"))]))
+
+(deftest a-relationship-is-never-empty
+  (let [ok? (fn [data] (m/validate (cm/->schema rel-reg "r@1.0.0.H")
+                                   (inst/json->edn (assoc data "$class" "r@1.0.0.H"))))]
+    (is (ok? {"a" "x"}) "a bare id")
+    (is (ok? {"a" "resource:r@1.0.0.A#x"}) "a resource URI")
+    (is (not (ok? {"a" ""})) "Missing id")
+    (is (not (ok? {"as" [""]})) "and the same inside an array")
+    (is (ok? {"as" ["x" "y"]}))
+    (is (not (ok? {"a" 5})))
+    (is (not (ok? {"a" {"$class" "r@1.0.0.A" "id" "x"}})) "an embedded resource is not a reference")))

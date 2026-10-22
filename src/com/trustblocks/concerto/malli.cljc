@@ -63,6 +63,27 @@
     (re-pattern (str "^(?:" yyyy loose
                      "|" yyyy "-?" mm "-?" dd "[T ]" time zone ")$"))))
 
+(defn- epoch->iso
+  "Whole seconds since the epoch as Concerto writes a DateTime: `2026-07-24T15:00:00Z`."
+  [s]
+  #?(:clj  (str (java.time.Instant/ofEpochSecond s))
+     :cljs (str/replace (.toISOString (js/Date. (* 1000 s))) #"\.000Z$" "Z")))
+
+(defn- date-time-hints
+  "What generating and describing a DateTime need, which neither can work out
+  from the pattern that checks it. A generator given only the pattern draws
+  strings and hopes one matches, and gives up; so it is told to draw a time in
+  the years around now, and write it out. JSON Schema is told it is a date-time,
+  and given the pattern as well: `format` is only enforced by a validator that
+  has the plugin for it, and a schema should not depend on that.
+  Properties only: nothing here changes what validates, and nothing needs
+  test.check until a generator is actually run."
+  [pattern]
+  {:gen/schema   [:int {:min 946684800 :max 2524608000}]
+   :gen/fmap     epoch->iso
+   :json-schema  {:type "string" :format "date-time"
+                  :pattern #?(:clj (.pattern ^java.util.regex.Pattern pattern) :cljs (.-source pattern))}})
+
 (def date-time
   "Concerto DateTime, checked on the wire form rather than by parsing.
 
@@ -76,7 +97,8 @@
   An earlier version accepted any string at all, plus JVM date objects. That
   passed \"hello\" and \"\", which Concerto rejects, and admitted types with no
   JavaScript counterpart."
-  [:and :string [:re {:error/message "should be a date-time"} date-time-pattern]])
+  [:and (date-time-hints date-time-pattern) :string
+   [:re {:error/message "should be a date-time"} date-time-pattern]])
 
 (def double-like
   "Concerto Double. JSON has no int/double distinction for whole numbers, so a
@@ -87,14 +109,19 @@
   failure is one clear line. The `:or` form reports every branch it tried
   (\"should be an integer\", \"should be a double\"), which reads as a
   contradiction rather than an explanation."
-  [:fn {:error/message "should be a number"} number?])
+  [:fn {:error/message "should be a number"
+        ;; Finite and unremarkable: a generator draws what a contract would hold,
+        ;; not NaN or 1e308, and JSON has no such numbers to write.
+        :gen/schema    [:double {:min -1000000.0 :max 1000000.0 :NaN? false :infinite? false}]
+        :json-schema   {:type "number"}}
+   number?])
 
 (def map-key
   "A map key, which arrives as a keyword once `instance/json->edn` has walked
   the instance: that keywordizes every key, entry keys of a Concerto map
   included, and a map key is data, not a property name, so `key-fn` does not
   apply to it. A string is accepted too, for an instance built by hand."
-  [:or :string :keyword])
+  [:or {:gen/schema [:string {:min 1 :max 12}]} :string :keyword])
 
 (def string-key
   "`[:concerto/string-key child]`: a keyword or string whose text satisfies
@@ -146,9 +173,14 @@
   "Concerto 5.2+ DateTime. Selected by `->schema`'s `:concerto-version \"5.2\"`;
   the looser `date-time` stays the default because it is what 3.x, 4.x, 5.0 and
   5.1 enforce."
-  [:and :string
+  [:and (date-time-hints date-time-strict-pattern) :string
    [:re {:error/message "should be a date-time"} date-time-strict-pattern]
    [:fn {:error/message "should be a date that exists"} real-date?]])
+
+(def ^:private ^:dynamic *generators*
+  "True while compiling with `:generators true`, which annotates the schema so
+  Malli can generate from it. Bound by `->schema`."
+  false)
 
 (def registry*
   "Malli registry: the defaults, malli.util's :merge/:select-keys, and the
@@ -303,6 +335,37 @@
                            ". Refusing to emit a schema that would ignore it.")
                       {:validator validator})))))
 
+(defn- generator-hint
+  "A schema to generate from, in place of `base` and the constraints on it.
+
+  Malli generates a `[:and base constraint...]` from `base` and keeps what passes
+  the rest, which works for a loose constraint and gives up on a tight one: a
+  string of 2 to 4 characters, or an integer from 10 to 12, is found only by luck.
+  Say where to look instead: a pattern for a regex (which needs test.chuck on the
+  JVM), the length for a length, the bounds for a range. A regex wins over a
+  length, since a pattern cannot be bounded and still be generated from; the
+  length is then checked and the odd miss retried."
+  [base {:keys [validator lengthValidator]}]
+  (let [vk (some-> validator :$class mm/metamodel-type)]
+    (cond
+      (= "StringRegexValidator" vk)
+      (regex-schema validator)
+
+      lengthValidator
+      (length-schema lengthValidator)
+
+      (#{"IntegerDomainValidator" "LongDomainValidator"} vk)
+      (let [{:keys [lower upper]} validator]
+        [:int (cond-> {}
+                (some? lower) (assoc :min lower)
+                (some? upper) (assoc :max upper))])
+
+      (= "DoubleDomainValidator" vk)
+      (let [{:keys [lower upper]} validator
+            lo (or lower (when upper (- upper 1000000.0)))
+            hi (or upper (when lower (+ lower 1000000.0)))]
+        [:double {:min lo :max hi :NaN? false :infinite? false}]))))
+
 (defn- constrained
   "Apply a node's validators to its compiled schema.
 
@@ -313,7 +376,11 @@
   [base node]
   (let [extra (concat (validator-schemas (:validator node))
                       (validator-schemas (:lengthValidator node)))]
-    (if (seq extra) (into [:and base] extra) base)))
+    (if (seq extra)
+      (if-let [hint (and *generators* (generator-hint base node))]
+        (into [:and {:gen/schema hint} base] extra)
+        (into [:and base] extra))
+      base)))
 
 (defn- enum-values [reg fqn]
   (into [:enum] (map :name) (:properties (declaration-of reg fqn))))
@@ -339,6 +406,11 @@
                       (mm/super-chain reg f))))
           {}
           (sort (keys reg))))
+
+(def ^:private reference
+  "The value of a relationship: the identifier it refers to, which Concerto
+  refuses to leave empty."
+  [:string {:min 1}])
 
 (declare object-schema)
 
@@ -389,6 +461,15 @@
   would inline forever."
   #{})
 
+(defn- string-key-of
+  "`[:concerto/string-key child]`, told to generate from `child` when asked to
+  generate at all: the schema's own check is a function, which Malli cannot
+  draw from."
+  [child]
+  (if *generators*
+    [:concerto/string-key {:gen/schema child} child]
+    [:concerto/string-key child]))
+
 (defn- map-key-schema
   "Schema for a map's keys.
 
@@ -400,7 +481,7 @@
   [reg fqn {:keys [$class type]}]
   (case (mm/metamodel-type $class)
     "StringMapKeyType"   :concerto/map-key
-    "DateTimeMapKeyType" [:concerto/string-key :concerto/date-time-key]
+    "DateTimeMapKeyType" (string-key-of :concerto/date-time-key)
     "ObjectMapKeyType"
     (let [t (mm/type-fqn type)]
       (when-not (declaration-of reg t)
@@ -416,11 +497,11 @@
                                "of them as map keys.")
                           {:map fqn :type t})))
         (cond
-          (at-least? 5 2) [:concerto/string-key
-                     (constrained (if (= :string base) base :concerto/date-time-key)
-                                  (declaration-of reg t))]
+          (at-least? 5 2) (string-key-of
+                           (constrained (if (= :string base) base :concerto/date-time-key)
+                                        (declaration-of reg t)))
           (= :string base) :concerto/map-key
-          :else            [:concerto/string-key :concerto/date-time-key])))
+          :else            (string-key-of :concerto/date-time-key))))
     (throw (ex-info (str "Cannot compile the key of map " (pr-str fqn) ": "
                          (pr-str $class) " is not a map key type this library "
                          "handles. Refusing to emit a schema that would accept "
@@ -435,7 +516,7 @@
       (case (relationship-maps)
         ;; As a RelationshipProperty: the referenced identifier, a bare id or a
         ;; `resource:` URI -- both strings.
-        :reference :string
+        :reference reference
         ;; An embedded resource, as 4.x, 5.0 and 5.1 read it.
         :embedded  (object-schema reg subtypes (mm/type-fqn type) key-fn)
         (throw (ex-info (str "Map " (pr-str fqn) " has a relationship value, which "
@@ -517,8 +598,10 @@
                  (case kind
                    "ObjectProperty"
                    (object-schema reg subtypes (mm/type-fqn (:type prop)) key-fn)
-                   ;; relationships store the referenced identifier
-                   "RelationshipProperty" :string
+                   ;; relationships store the referenced identifier: a bare id or a
+                   ;; `resource:` URI, and never empty (\"Missing id\"). Whether the
+                   ;; URI names a type the property may hold is not checked.
+                   "RelationshipProperty" reference
                    nil))]
     ;; No permissive default. An unrecognised property kind used to compile to
     ;; :any, which accepts anything -- so a model this library does not fully
@@ -561,6 +644,22 @@
                   {:idx {} :order []}
                   entries)))
 
+(defn- system-identified?
+  "Whether the declaration, or a supertype, is declared `identified` -- by the
+  system `$identifier`, as opposed to `identified by` a field of its own."
+  [reg fqn]
+  (boolean
+   (some #(= "Identified" (mm/metamodel-type (:$class (get-in reg [% :declaration :identified]))))
+         (mm/super-chain reg fqn))))
+
+(defn- non-empty
+  "An identifier may not be empty: Concerto reads `\"\"` as no identifier at all
+  (\"Missing identifier for Type ...\"), even when `$identifier` is also given."
+  [schema]
+  (if (= :string schema)
+    [:string {:min 1}]
+    [:and schema [:string {:min 1}]]))
+
 (defn- system-properties
   "Concerto's `$` properties, admitted where Concerto admits them.
 
@@ -582,12 +681,17 @@
              ;; lossless, and what :multi dispatches on. Required at the root
              ;; and on an abstract type, optional on a nested concrete one --
              ;; see `object-schema`.
-             (if (or root? (abstract? reg fqn))
+             (if (or root? (abstract? reg fqn) *generators*)
+               ;; Always present when generating: it is valid to say, and a
+               ;; generator that may leave it out produces instances that need it.
                [(key-fn "$class") [:= fqn]]
                ;; Concerto treats a null or empty $class as absent, so the
                ;; declared type is read in its place.
                [(key-fn "$class") {:optional true} [:maybe [:enum fqn ""]]])
-             [(key-fn "$identifier") {:optional true} :string]]
+             ;; Accepted on any declaration. On an `identified` one, a value that is
+             ;; there may not be empty; leaving it out is fine.
+             [(key-fn "$identifier") {:optional true}
+              (if (system-identified? reg fqn) [:string {:min 1}] :string)]]
 
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
       (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
@@ -597,7 +701,8 @@
   into it, parents first."
   [reg subtypes fqn key-fn closed root?]
   (check-compilable! reg fqn)
-  (let [entries (for [f    (reverse (mm/super-chain reg fqn))
+  (let [id-field (mm/identity-field reg fqn)
+        entries (for [f    (reverse (mm/super-chain reg fqn))
                       prop (:properties (declaration-of reg f))]
                   (let [k (key-fn (:name prop))]
                     ;; A default makes a field omittable: Concerto fills it in.
@@ -608,7 +713,8 @@
                       ;; itself: a null *inside* an array is still an error, and
                       ;; a required property's null is a missing field.
                       [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]]
-                      [k (property->schema reg subtypes prop key-fn)])))]
+                      [k (cond-> (property->schema reg subtypes prop key-fn)
+                           (= id-field (:name prop)) non-empty)])))]
     (into (into [:map (cond-> {} closed (assoc :closed true))]
                 (system-properties reg fqn key-fn root?))
           (ordered entries))))
@@ -713,13 +819,19 @@
                  alone), and a scalar's constraints apply to a map key
     relationship map values   see `relationship-maps`
 
-  Nothing separates 3, 4 and 5.0 otherwise: 5.0 is not the strict one."
-  [reg fqn & {:keys [key-fn closed concerto-version]
+  Nothing separates 3, 4 and 5.0 otherwise: 5.0 is not the strict one.
+
+  `:generators true` annotates the schema so Malli can generate from it -- see
+  the `generator` namespace, which does it for you. It changes how the schema is
+  written, not what it accepts: a pattern, a length or a range is given as the
+  place to look, a map key is told what to draw from, and `$class` is always
+  present. Leave it off for validation, so the emitted form stays plain."
+  [reg fqn & {:keys [key-fn closed concerto-version generators]
               :or   {key-fn keyword closed true concerto-version 4}}]
   (let [version (parse-version concerto-version)]
   (when (empty? (mm/super-chain reg fqn))
     (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
-  (binding [*version* version]
+  (binding [*version* version, *generators* (boolean generators)]
    (let [subtypes (subtype-index reg)
          needed   (referenced reg subtypes fqn)
          root     (object-schema reg subtypes fqn key-fn true)
@@ -746,7 +858,7 @@
                                       (sort needed))}
                      ;; The registry entries let a nested value omit its
                      ;; $class; the root may not.
-                     (if (= :ref (first root))
+                     (if (and (= :ref (first root)) (not *generators*))
                        [:and [:map [(key-fn "$class") :string]] root]
                        root)])]
      (m/schema (if (at-least? 5 2)
