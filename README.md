@@ -64,15 +64,16 @@ are both legal EDN keywords that read back identically, so names like
 (cm/->edn reg "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel")
 ;; =>
 ;; [:map
-;;  {:closed true}
 ;;  [:$class [:= "org.accordproject.acceptanceofdelivery@0.1.0.TemplateModel"]]
 ;;  [:$identifier {:optional true} :string]
-;;  [:clauseId :string]
+;;  [:clauseId [:string {:min 1}]]
 ;;  [:shipper :string]
 ;;  [:receiver :string]
 ;;  [:deliverable :string]
 ;;  [:businessDays :int]
-;;  [:attachment :string]]
+;;  [:attachment :string]
+;;  [:malli.core/default
+;;   [:map-of :any [:nil {:error/message "is not a declared property"}]]]]
 ```
 
 That is plain EDN — no functions, no `#object[...]` — so it can be written to a
@@ -88,56 +89,78 @@ itself terminates:
 
 ```clojure
 [:schema {:registry {"org.accordproject.money@0.3.0.MonetaryAmount"
-                     [:map {:closed true}
+                     [:map
                       [:$class [:= "org.accordproject.money@0.3.0.MonetaryAmount"]]
                       [:doubleValue :concerto/double]
-                      [:currencyCode [:enum "AED" "AFN" ...]]]
+                      [:currencyCode [:enum "AED" "AFN" ...]]
+                      [:malli.core/default [:map-of :any [:nil ...]]]]
                      "org.accordproject.promissorynote@0.2.0.TemplateModel"
-                     [:map {:closed true}
+                     [:map
                       ...
-                      [:amount [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]]]}}
+                      [:amount [:ref "org.accordproject.money@0.3.0.MonetaryAmount"]]
+                      [:malli.core/default [:map-of :any [:nil ...]]]]}}
  [:ref "org.accordproject.promissorynote@0.2.0.TemplateModel"]]
 ```
 
 A model with nothing nested emits as a plain map, as above.
 
-Maps are closed, matching Concerto, which rejects undeclared properties. Pass
-`:closed false` if the values being validated legitimately carry extra keys,
-though a storage adapter should strip its own derived keys instead — that way
-the guarantee this library offers is the one Concerto offers.
+Maps are closed, matching Concerto, which rejects undeclared properties. The last
+entry of each map is what closes it: Malli's default entry, which is the schema for
+every key the map does not name, and here allows only `null`. Concerto ignores an
+undeclared property whose value is `null` (in every release checked, 3.16.7 to 5.2.1,
+at any depth) and rejects any other, so `{:closed true}`, which refuses a key whatever its
+value, would turn away an instance Concerto accepts. Pass `:closed false` if the
+values being validated legitimately carry extra keys, though a storage adapter
+should strip its own derived keys instead — that way the guarantee this library
+offers is the one Concerto offers.
 
 ### Which Concerto
 
 The validator this library agrees with is not one fixed thing, and the break is
-not where the major version is: **5.0 and 5.1 behave like 4.x; the strictness
-arrived in 5.2.0.** Choose with `:concerto-version`: a major version (`3`, `4`,
-`5`, where an integer means that major's first release, so `5` is 5.0) or a
-string that names the minor. The default is `4`.
+not where the major version is: **everything from 3.16.7 to 5.1.x behaves alike,
+and the strictness arrived in 5.2.0.** Choose with `:concerto-version`: a major
+version (`3`, `4`, `5`, where an integer means that major's first release, so `5`
+is 5.0.0) or a string that names the minor and patch, `"5.2"`, `"4.1.3"`. The
+default is `4`.
 
 ```clojure
-(cm/->schema reg fqn)                           ; 3.x / 4.x, the default
-(cm/->schema reg fqn :concerto-version 5)       ; 5.0 and 5.1 -- the same as 4
+(cm/->schema reg fqn)                           ; 4.0.0, the default
+(cm/->schema reg fqn :concerto-version 5)       ; 5.0.0 -- the same, but for --> maps
 (cm/->schema reg fqn :concerto-version "5.2")   ; 5.2.0 and later
 ```
 
-| | 3.x | 4.x, 5.0, 5.1 | 5.2 and later |
-|---|---|---|---|
-| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | same | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
-| scalar's constraints on a map key | not checked | not checked | checked |
-| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | same | checked |
-| DateTime map key | loose | loose | loose, unchanged |
-| `--> Asset` map value | model refused | the embedded resource, `$class` and all; a `resource:` string is rejected | the referenced identifier, a string; an embedded resource is rejected |
+| | 3.16.7 to 5.1.x | 5.2.0 and later |
+|---|---|---|
+| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
+| scalar's constraints on a map key | not checked | checked |
+| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | checked |
+| DateTime map key | loose | loose, unchanged |
+
+The one thing that varies *within* that range is a relationship as a map value
+(`map M { o K --> Asset }`), which has four regimes, each boundary found by running
+the releases either side of it:
+
+| | the value |
+|---|---|
+| before 3.23.0 | the model cannot be loaded; compiling it here is refused |
+| 3.23.0 to 4.1.2 | a `resource:` string or an embedded resource, either |
+| 4.1.3 to 5.1.x | the embedded resource, `$class` and all; a `resource:` string is rejected |
+| 5.2.0 and later | the referenced identifier, a string; an embedded resource is rejected |
+
+So `4`, being 4.0.0, takes either, and `"4.1.3"` and `5` take the embedded resource.
 
 Each cell was observed by running Concerto, not read from release notes: 3.16.7
-through `concerto validate`, and 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1 through
-concerto-core's `Serializer`. The boundary is exact: 5.1.0 matches 5.0.0, and
-5.2.0 matches 5.2.1. The test suite carries the DateTime tables for both
-behaviors. Metamodel JSON is identical across all of them, so the parser,
-fixtures and registry do not depend on the choice.
+through `concerto validate`, and the rest through concerto-core's `Serializer`:
+3.20.0, 3.21.0, 3.22.0, 3.23.0, 3.24.0, 3.25.0, 3.26.0, every 4.x release (4.0.0 to
+4.0.3, 4.1.0, 4.1.2 to 4.1.5, 4.2.0), 5.0.0, 5.1.0, 5.2.0 and 5.2.1: 22 in all. The DateTime and map-typing rows were run on 3.16.7, 3.20.0, 3.26.0,
+4.0.0, 4.1.0, 4.1.5, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1. The boundaries are exact:
+5.1.0 matches 5.0.0 and 5.2.0 matches 5.2.1. The test suite carries the DateTime
+tables for both behaviors. Metamodel JSON is identical across all of them, so the
+parser, fixtures and registry do not depend on the choice.
 
 (Concerto's maintainers are also building a Rust engine for a future 6.0 that
 deliberately returns to the 5.0 behavior for `--> Asset` map values, so that
-cell may move again.)
+row may move again.)
 
 ### Sample instances and JSON Schema
 
@@ -592,9 +615,10 @@ Where the suite and 5.2.1 disagree, `model-check` follows 5.2.1. A scenario that
 fails neither way goes in `known-failures.edn`, which the test requires to still
 fail; it is empty.
 
-Not covered: decorators on the model itself (as opposed to its declarations and
-properties) are not validated, and a default value is not checked against its
-field's validators.
+Decorators are validated wherever they are: on the model itself (from 3.26.0; the
+message names its context as `"undefined"`, which is what Concerto prints), its
+declarations and their properties. A default value is checked against its own
+field's validators (length, pattern, range), as Concerto does from 3.26.0 to 5.2.1.
 
 **Metamodel validation** compiles the metamodel's own CTO with this library's
 compiler (`metamodel_schema.cljc`, generated by `script/gen_metamodel_schema.clj`)
@@ -609,7 +633,7 @@ specifications and in `fixtures/` (source locations included), which it accepts
 apart from the six built to be malformed; and by a differential against concerto-core
 5.2.1's `MetaModel.validateMetaModel` over 6,000 seeded random mutations of those
 ASTs (`script/metamodel_differential/`) (a key deleted, a value of the wrong type, a property added, a `$class`
-swapped or dropped, a value nulled). 5,884 agree. The other 116 are understood:
+swapped or dropped, a value nulled). 5,885 agree. The other 115 are understood:
 
 - 111 are the identifier regex. The metamodel puts JavaScript's `u`-flag identifier
   regex on three `name` properties, which the compiler refuses to emit because the
@@ -619,9 +643,6 @@ swapped or dropped, a value nulled). 5,884 agree. The other 116 are understood:
 - 4 are JavaScript coercion: a number where an object is declared
   (`lengthValidator: 5`) populates an object with no properties, so Concerto
   accepts it. This library rejects it.
-- 1 is an undeclared property whose value is `null`, which Concerto ignores and a
-  closed map here rejects. It is not specific to the metamodel: the same holds for
-  any instance, and is a known small false rejection.
 
 ## Status
 

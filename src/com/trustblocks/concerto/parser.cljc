@@ -59,8 +59,29 @@
     (cond
       (tag= :string-lit v)  (unquote-string (text v))
       (tag= :boolean-lit v) (= "true" (text v))
+      (tag= :lit-number v)  (number-value v)
       (tag= :number v)      (number-value v)
       :else                 nil)))
+
+(defn- check-default!
+  "Concerto's parser takes a default only of the field's own kind, and refuses
+  the rest as a parse error: an Integer or Long takes an integer (`+5`, `007`; not
+  `1.5` or `1e3`), a Double a decimal point (`1.5`, `1.5e3`; not `1`, `.5` or
+  `1e3`), a Boolean `true` or `false`, and anything else -- a String, a DateTime,
+  an enum, an object -- a string. A model that reads fine with a default of the
+  wrong kind would be one Concerto cannot load."
+  [type-name literal]
+  (let [v  (second literal)
+        s  (text v)
+        ok (cond
+             (#{"Integer" "Long"} type-name) (and (tag= :lit-number v) (re-matches #"[+-]?[0-9]+" s))
+             (= "Double" type-name)          (and (tag= :lit-number v)
+                                                  (re-matches #"[+-]?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?" s))
+             (= "Boolean" type-name)         (tag= :boolean-lit v)
+             :else                           (tag= :string-lit v))]
+    (when-not ok
+      (throw (ex-info "Could not parse CTO"
+                      {:failure {:reason (str "a default of " (pr-str s) " is not a " type-name)}})))))
 
 (defn- number-value
   "A CTO number as EDN.
@@ -158,7 +179,8 @@
              :isArray    (some? (child :array node))
              :isOptional (some? (child :optional node))}
       (nil? primitive) (assoc :type (type-identifier type-name))
-      d       (assoc :defaultValue (literal-value (child :literal d)))
+      d       (assoc :defaultValue (do (check-default! type-name (child :literal d))
+                               (literal-value (child :literal d))))
       regex   (assoc :validator (->regex-validator regex))
       range-v (assoc :validator (->domain-validator range-v type-name))
       len     (assoc :lengthValidator (->length-validator len))
@@ -197,7 +219,8 @@
         d     (child :scalar-default node)]
     (cond-> {:$class (str mm (scalar-kinds kind "StringScalar"))
              :name   (ident-of node)}
-      d       (assoc :defaultValue (literal-value (child :literal d)))
+      d       (assoc :defaultValue (do (check-default! kind (child :literal d))
+                               (literal-value (child :literal d))))
       regex   (assoc :validator (->regex-validator regex))
       rng     (assoc :validator (->domain-validator rng kind))
       len     (assoc :lengthValidator (->length-validator len))

@@ -179,23 +179,44 @@
   (let [ok? (fn [version v]
               (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel" :concerto-version version)
                           {:x v}))
+        uri      "resource:m@1.0.0.Thing#1"
         embedded {:$class "m@1.0.0.Thing" :id "1"}]
-    (testing "4.x, 5.0 and 5.1 want the embedded resource and refuse a reference"
-      (doseq [v [4 5 "5.1"]]
-        (is (ok? v embedded) (str "at " (pr-str v)))
-        (is (not (ok? v "resource:m@1.0.0.Thing#1")))
-        (is (not (ok? v "1")))
-        (is (not (ok? v {:$class "m@1.0.0.Thing"})) "and it is still checked")))
-    (testing "from 5.2 the value is the reference, and an embedded one is refused"
-      (doseq [v ["5.2" "5.2.1"]]
-        (is (ok? v "resource:m@1.0.0.Thing#1"))
-        (is (ok? v "1"))
-        (is (not (ok? v 5)))
-        (is (not (ok? v embedded)))))
-    (testing "3.x cannot load such a model, so there is nothing to agree with"
-      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
-                            #"Concerto 3.x cannot load"
-                            (cm/->schema maps-reg "m@1.0.0.S2Rel" :concerto-version 3))))))
+    (testing "every boundary below was found by running the releases either side
+             of it: 3.22.0 and 3.23.0, 4.1.2 and 4.1.3, 5.1.0 and 5.2.0"
+
+      (testing "before 3.23.0 the model cannot be loaded, so there is nothing to agree with"
+        (doseq [v [3 "3.22.0"]]
+          (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                                #"before 3.23.0 cannot load"
+                                (cm/->schema maps-reg "m@1.0.0.S2Rel" :concerto-version v))
+              (pr-str v))))
+
+      (testing "3.23.0 to 4.1.2: either a reference or an embedded resource"
+        ;; 4, being 4.0.0, is in this range, and so is the default.
+        (doseq [v ["3.23.0" "3.26.0" 4 "4.1.2"]]
+          (is (ok? v uri) (str "uri at " (pr-str v)))
+          (is (ok? v "1") (str "bare id at " (pr-str v)))
+          (is (ok? v embedded) (str "embedded at " (pr-str v)))
+          (is (not (ok? v "")) "still not empty")
+          (is (not (ok? v {:$class "m@1.0.0.Thing"})) "and an embedded one is still checked")))
+
+      (testing "4.1.3 to 5.1.x: the embedded resource, and a reference is refused"
+        (doseq [v ["4.1.3" "4.2" 5 "5.1"]]
+          (is (ok? v embedded) (str "embedded at " (pr-str v)))
+          (is (not (ok? v uri)) (str "uri at " (pr-str v)))
+          (is (not (ok? v "1")))
+          (is (not (ok? v {:$class "m@1.0.0.Thing"})))))
+
+      (testing "5.2.0 on: the reference, and an embedded resource is refused"
+        (doseq [v ["5.2" "5.2.1"]]
+          (is (ok? v uri))
+          (is (ok? v "1"))
+          (is (not (ok? v 5)))
+          (is (not (ok? v embedded))))))
+
+    (testing "the default, 4, is 4.0.0, so it takes both"
+      (is (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel") {:x uri}))
+      (is (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel") {:x embedded})))))
 
 (deftest a-concerto-5-2-schema-exports-as-edn
   (let [form (cm/->edn maps-reg "m@1.0.0.H" :concerto-version "5.2")]

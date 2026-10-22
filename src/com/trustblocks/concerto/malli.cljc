@@ -420,38 +420,46 @@
 (declare object-schema)
 
 (def ^:private ^:dynamic *version*
-  "The [major minor] of the Concerto validator being agreed with. Bound by
+  "The [major minor patch] of the Concerto validator being agreed with. Bound by
   `->schema`; see `parse-version`."
-  [4 0])
+  [4 0 0])
 
-(defn- at-least? [major minor]
-  (>= (compare *version* [major minor]) 0))
+(defn- at-least?
+  "Whether the version being agreed with is at least major.minor.patch."
+  ([major minor] (at-least? major minor 0))
+  ([major minor patch]
+   (>= (compare *version* [major minor patch]) 0)))
 
 (defn- relationship-maps
-  "How `map M { o K --> Asset }` values are held, which differs by version:
+  "How `map M { o K --> Asset }` values are held, which differs by version in four
+  ways, each boundary found by running the neighbouring releases:
 
-    :unsupported  3.x cannot load the model at all.
-    :embedded     4.x, 5.0, 5.1: the value is the embedded resource, `$class`
-                  and all; a `resource:` string is rejected.
-    :reference    5.2 on (concerto-core #1567): the value is the referenced
-                  identifier, a string, and an embedded resource is rejected.
+    :unsupported  before 3.23.0: the model cannot be loaded at all.
+    :either       3.23.0 to 4.1.2: a `resource:` string, or an embedded resource.
+    :embedded     4.1.3 to 5.1.x: the embedded resource, `$class` and all; a
+                  `resource:` string is rejected.
+    :reference    5.2.0 on (concerto-core #1567): the referenced identifier, a
+                  string; an embedded resource is rejected.
 
-  Each was run against concerto-core 3.16.7, 4.2.0, 5.0.0, 5.1.0, 5.2.0, 5.2.1."
+  Run against concerto-core 3.16.7, 3.20.0, 3.21.0, 3.22.0, 3.23.0, 3.24.0,
+  3.25.0, 3.26.0, 4.0.0 to 4.1.5, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1."
   []
-  (cond (at-least? 5 2) :reference
-        (at-least? 4 0) :embedded
-        :else           :unsupported))
+  (cond (at-least? 5 2)    :reference
+        (at-least? 4 1 3)  :embedded
+        (at-least? 3 23)   :either
+        :else              :unsupported))
 
 (defn- parse-version
-  "`:concerto-version` as [major minor]. An integer is that major version's
-  earliest release (`5` is 5.0); a string `\"5.2\"` or `\"5.2.1\"` names the
-  minor too, which is what separates 5.0/5.1 from 5.2 on."
+  "`:concerto-version` as [major minor patch]. An integer is that major version's
+  earliest release (`5` is 5.0.0); a string `\"5.2\"` or `\"4.1.3\"` names the minor
+  and patch too, which is what separates 5.0 and 5.1 from 5.2 on, and 4.1.2 from
+  4.1.3."
   [v]
   (let [parts (cond
-                (integer? v) [v 0]
+                (integer? v) [v 0 0]
                 (and (string? v) (re-matches #"\d+(\.\d+){0,2}" v))
                 (mapv #?(:clj #(Long/parseLong %) :cljs #(js/parseInt % 10))
-                      (take 2 (concat (str/split v #"\.") ["0"])))
+                      (take 3 (concat (str/split v #"\.") ["0" "0"])))
                 :else nil)]
     (when-not (and parts (#{3 4 5} (first parts)))
       (throw (ex-info (str "Unsupported :concerto-version " (pr-str v)
@@ -522,10 +530,12 @@
         ;; As a RelationshipProperty: the referenced identifier, a bare id or a
         ;; `resource:` URI -- both strings.
         :reference reference
-        ;; An embedded resource, as 4.x, 5.0 and 5.1 read it.
+        ;; An embedded resource, as 4.1.3 to 5.1 read it.
         :embedded  (object-schema reg subtypes (mm/type-fqn type) key-fn)
+        ;; Either, as 3.23.0 to 4.1.2 do.
+        :either    [:or reference (object-schema reg subtypes (mm/type-fqn type) key-fn)]
         (throw (ex-info (str "Map " (pr-str fqn) " has a relationship value, which "
-                             "Concerto 3.x cannot load. Refusing to emit a schema "
+                             "Concerto before 3.23.0 cannot load. Refusing to emit a schema "
                              "for a model that version rejects.")
                         {:map fqn :concerto-version *version*})))
       (or (scalar (str/replace kind #"MapValueType$" "Property"))
@@ -701,6 +711,17 @@
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
       (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
 
+(def ^:private undeclared
+  "What a closed map says of the keys it does not declare: that they are null.
+  Concerto rejects an undeclared property, but ignores one whose value is null --
+  in every version checked, at any depth -- so `{:closed true}`, which rejects a
+  key whatever its value, would refuse an instance Concerto accepts.
+
+  Malli's default entry is the schema for every key not otherwise named, and
+  `:nil` leaves nothing else through. It is also what JSON Schema calls
+  `additionalProperties: {type: null}`, which is the same rule."
+  [::m/default [:map-of :any [:nil {:error/message "is not a declared property"}]]])
+
 (defn- declaration->map
   "One declaration as a map schema, with its whole inheritance chain flattened
   into it, parents first."
@@ -725,9 +746,12 @@
                         [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]])
                       [k (cond-> (property->schema reg subtypes prop key-fn)
                            (= id-field (:name prop)) non-empty)])))]
-    (into (into [:map (cond-> {} closed (assoc :closed true))]
+    ;; Generating, a map that tolerates extra keys would be drawn with junk ones,
+    ;; so it stays plain closed there: only validation needs to tolerate a null.
+    (into (into [:map (cond-> {} (and closed *generators*) (assoc :closed true))]
                 (system-properties reg fqn key-fn root?))
-          (ordered (remove nil? entries)))))
+          (cond-> (vec (ordered (remove nil? entries)))
+            (and closed (not *generators*)) (conj undeclared)))))
 
 (defn- inline-kind?
   "Kinds that compile in place of being referenced, so need no registry entry."
@@ -747,7 +771,7 @@
         (let [v (:value (declaration-of reg t))]
           (when (or (= "ObjectMapValueType" (mm/metamodel-type (:$class v)))
                     (and (= "RelationshipMapValueType" (mm/metamodel-type (:$class v)))
-                         (= :embedded (relationship-maps))))
+                         (#{:embedded :either} (relationship-maps))))
             (type-targets reg subtypes (mm/type-fqn (:type v)) (conj seen t))))
 
         (inline-kind? kind) nil
@@ -805,7 +829,8 @@
 (defn ->schema
   "Compile a Malli schema for a `$class`, flattening its whole inheritance chain.
 
-  Maps are closed, matching Concerto, which rejects undeclared properties. Pass
+  Maps are closed, matching Concerto, which rejects undeclared properties -- and
+  ignores one whose value is null, so a closed map says the same. Pass
   `:closed false` only if the values being validated legitimately carry extra
   keys -- a storage adapter should strip its own derived keys instead, so that
   the guarantee this library offers is the one Concerto offers.
@@ -820,9 +845,9 @@
   reference.
 
   `:concerto-version` is the validator to agree with: a major version (3, 4,
-  the default 4, or 5, which is 5.0) or a string naming the minor, `\"5.2\"`. What
-  changes, and where (each run against concerto-core 3.16.7, 4.2.0, 5.0.0,
-  5.1.0, 5.2.0 and 5.2.1):
+  the default 4, or 5, each meaning that major's first release) or a string naming
+  the minor and patch, `\"5.2\"`, `\"4.1.3\"`. What changes, and where (each run
+  against the releases listed in `relationship-maps`, among others):
 
     from 5.2.0   a DateTime must be a real `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or
                  `+/-HH:MM` (earlier versions accept a bare year or a date

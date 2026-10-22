@@ -8,6 +8,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The CTO parser refuses a default of the wrong kind, as Concerto's does: an Integer
+  or Long takes an integer, a Double needs a decimal point (`1.5`, not `1`, `.5` or
+  `1e3`), a Boolean `true` or `false`, and a String, DateTime, enum or object a
+  string. It accepted any literal, so a model Concerto cannot load parsed fine; 17
+  of 34 cases checked differed, and all agree now. It also refused `default=+5`,
+  which Concerto takes. The 237-file differential only had valid files, which is
+  why it never saw this.
+- A default value is checked against its own field's validators (length, pattern,
+  range), on properties and scalars, with Concerto's messages: the string checks
+  skip an empty default, the number checks do not skip 0, and numbers print as
+  JavaScript prints them. The same rule from 3.26.0 to 5.2.1.
+- Decorators on the model itself are validated, as on its declarations and
+  properties: under `:decoratorValidation`, one must name a declared type and fit
+  its properties, and a duplicate is always an error. Concerto does the same from
+  3.26.0 to 5.2.1, and starts with them, before the model's imports; its messages
+  name the model's context as `"undefined"`, and so do ours. They were skipped.
+- `:concerto-version` now takes a patch (`"4.1.3"`), because a relationship map
+  value changes between 4.1.2 and 4.1.3, and was wrong for 3.23.0 to 4.1.2, which
+  take either a `resource:` string or an embedded resource. It had been described
+  as unloadable throughout 3.x and embedded-only throughout 4.x, from three
+  releases tested; it was then run on 22 and the boundaries found. The default,
+  4, is 4.0.0 and so now takes either; it previously took only the embedded one.
+- The rules for an empty identifier, an empty relationship and an undeclared null
+  were also run on 3.16.7, 3.26.0, 4.0.0, 4.1.0 and 4.1.5, and are the same as on
+  4.2.0 to 5.2.1: they do not vary with `:concerto-version`.
+- An undeclared property whose value is `null` is ignored, as Concerto does (every
+  release checked, 3.16.7 to 5.2.1, at any depth); it was rejected. Any other value is still
+  rejected, and `false`, `""` and `0` are not null. A closed map is now closed by
+  Malli's default entry, which allows only `null`, in place of `{:closed true}`, so
+  the emitted form differs, and the JSON Schema is `additionalProperties:
+  {type: null}`, which is the same rule. Generation keeps the plain closed map.
+  Settles the one remaining disagreement in the metamodel differential (5,885 of
+  6,000 now agree).
 - An identifier may not be empty. Concerto reads `""` as no identifier ("Missing
   identifier for Type ..."): for an `identified by` field, even when `$identifier`
   is also given, and for a system `$identifier` that is present. Both were
@@ -94,8 +127,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as `"5.2"`. The strictness is not where the major version is: DateTime must be
   a real `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`, and a scalar's
   constraints apply to a map key, **from 5.2.0** -- 5.0 and 5.1 behave like 4.x.
-  A `--> Asset` map value is the embedded resource in 4.x, 5.0 and 5.1, the
-  referenced identifier from 5.2, and unloadable in 3.x. Each was run against
+  A `--> Asset` map value has four regimes: unloadable before 3.23.0, either a
+  reference or an embedded resource from 3.23.0 to 4.1.2, the embedded resource
+  from 4.1.3 to 5.1.x, and the reference from 5.2.0. Each was run against
   concerto-core 3.16.7, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1.
 - Registry schemas `:concerto/string-key`, `:concerto/map-key`,
   `:concerto/date-time-key` and `:concerto/date-time-strict`.

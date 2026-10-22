@@ -223,3 +223,52 @@
              (:sizeValidator (prop "o String[] a size=[2,]"))))
       (is (= {:$class "concerto.metamodel@1.0.0.CollectionSizeValidator" :maxSize 5}
              (:sizeValidator (prop "o String[] a size=[,5] optional")))))))
+
+(deftest a-default-must-be-of-the-fields-own-kind
+  (let [pre   "namespace m@1.0.0\nenum Colour { o RED o BLUE }\nconcept Item { o String n }\n"
+        reads? (fn [body] (try (p/parse-string (str pre body)) true
+                               (catch #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo) _ false)))]
+    (testing "each verdict is what `concerto parse` 5.2.1 gave for the same text"
+      (doseq [[body ok?] [["concept A { o Integer n default=5 }" true]
+                          ["concept A { o Integer n default=-5 }" true]
+                          ["concept A { o Integer n default=+5 }" true]
+                          ["concept A { o Integer n default=007 }" true]
+                          ["concept A { o Integer n default=1e3 }" false]
+                          ["concept A { o Integer n default=1.5 }" false]
+                          ["concept A { o Integer n default=\"x\" }" false]
+                          ["concept A { o Long n default=5 }" true]
+                          ["concept A { o Long n default=5.0 }" false]
+                          ["concept A { o Double d default=1.0 }" true]
+                          ["concept A { o Double d default=-1.5 }" true]
+                          ["concept A { o Double d default=+1.5 }" true]
+                          ["concept A { o Double d default=1.5e3 }" true]
+                          ["concept A { o Double d default=1 }" false]
+                          ["concept A { o Double d default=.5 }" false]
+                          ["concept A { o Double d default=1e3 }" false]
+                          ["concept A { o String s default=\"x\" }" true]
+                          ["concept A { o String s default=5 }" false]
+                          ["concept A { o DateTime t default=\"2020-01-01T00:00:00Z\" }" true]
+                          ["concept A { o DateTime t default=5 }" false]
+                          ["concept A { o Boolean b default=true }" true]
+                          ["concept A { o Boolean b default=\"yes\" }" false]
+                          ["concept A { o Colour c default=\"RED\" }" true]
+                          ["concept A { o Colour c default=5 }" false]
+                          ["concept A { o Colour c default=RED }" false]
+                          ["concept A { o Item i default=\"x\" }" true]
+                          ["concept A { o Integer[] a default=1 }" true]
+                          ["scalar I extends Integer default=1" true]
+                          ["scalar I extends Integer default=1.5" false]
+                          ["scalar D extends Double default=1" false]
+                          ["scalar D extends Double default=1.5" true]
+                          ["scalar S extends String default=5" false]
+                          ["scalar B extends Boolean default=\"x\"" false]
+                          ["scalar B extends Boolean default=false" true]
+                          ["scalar T extends DateTime default=5" false]]]
+        (is (= ok? (reads? body)) body)))
+    (testing "a refused default is reported as a parse failure, with the reason"
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                            #"Could not parse CTO"
+                            (p/parse-string (str pre "concept A { o Integer n default=\"x\" }")))))
+    (testing "a leading + is allowed on a default and the value is the number"
+      (is (= 5 (-> (p/parse-string (str pre "concept A { o Integer n default=+5 }"))
+                   :declarations last :properties first :defaultValue))))))

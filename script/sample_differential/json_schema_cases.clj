@@ -18,12 +18,14 @@
   (let [ps (paths x) p (nth ps (rnd (count ps))) node (get-in x p x)]
     (if (map? node)
       (let [ks (vec (keys node))]
-        (case (rnd 5)
+        (case (rnd 6)
           0 (if (seq ks) (update-in* x p dissoc (nth ks (rnd (count ks)))) x)
           1 (if (seq ks) (let [k (nth ks (rnd (count ks)))] (assoc-in x (conj p k) (wrong (get node k)))) x)
           2 (assoc-in x (conj p "bogus") 1)
           3 (if (seq ks) (let [k (nth ks (rnd (count ks)))] (assoc-in x (conj p k) nil)) x)
-          4 (if (seq ks) (let [k (nth ks (rnd (count ks)))] (if (string? (get node k)) (assoc-in x (conj p k) "") x)) x)))
+          4 (if (seq ks) (let [k (nth ks (rnd (count ks)))] (if (string? (get node k)) (assoc-in x (conj p k) "") x)) x)
+          ;; an undeclared property that is null, which Concerto ignores
+          5 (assoc-in x (conj p "undeclared") nil)))
       x)))
 (def root (io/file (first *command-line-args*)))
 (def out (io/file (second *command-line-args*)))

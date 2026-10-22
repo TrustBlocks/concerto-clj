@@ -114,7 +114,10 @@ decorator-args = <'('> (decorator-arg (<','> decorator-arg)*)? <')'>
 decorator-arg  = literal / type-ref
 type-ref       = ident array?
 
-literal = string-lit | number | boolean-lit
+(* A literal's number may carry a `+`, which a range bound's may not: Concerto's
+   parser takes `default=+5` and the bound grammar has no sign but `-`. *)
+literal = string-lit | lit-number | boolean-lit
+lit-number = #'[+-]?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?'
 boolean-lit = 'true' | 'false'
 
 ident          = #'[A-Za-z_$][A-Za-z0-9_$]*'
