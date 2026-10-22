@@ -3,9 +3,15 @@
   (clojure -M:test), babashka (bb -m com.trustblocks.concerto.test-runner) and
   ClojureScript on Node (clojure -M:cljs-test).
 
-  Two suites are conditional:
+  Some suites are conditional:
 
     cto-test     JVM and babashka only -- it shells out to Accord's CLI.
+
+    generator-test, generator-parsed-test
+                 JVM only (generator-test also runs under babashka): sample
+                 generation needs test.check, and test.chuck for a regex, which
+                 are not in the ClojureScript build and, for test.chuck, not in
+                 babashka. generator-parsed-test also needs the CTO parser.
 
     parser-test, malli-parsed-test, conformance-validate-test
                  JVM and ClojureScript only. instaparse uses `deftype` with
@@ -16,6 +22,7 @@
             com.trustblocks.concerto.conformance-semantic-test
             com.trustblocks.concerto.conformance-test
             com.trustblocks.concerto.instance-test
+            com.trustblocks.concerto.json-schema-test
             com.trustblocks.concerto.malli-test
             com.trustblocks.concerto.metamodel-test
             #?@(:cljs [com.trustblocks.concerto.conformance-validate-test
@@ -41,9 +48,12 @@
                          'com.trustblocks.concerto.instance-test
                          'com.trustblocks.concerto.conformance-semantic-test
                          'com.trustblocks.concerto.conformance-test
+                         'com.trustblocks.concerto.json-schema-test
+                         'com.trustblocks.concerto.generator-test
                          'com.trustblocks.concerto.cto-test]
                   (not babashka?) (conj 'com.trustblocks.concerto.conformance-validate-test
                                        'com.trustblocks.concerto.malli-parsed-test
+                                       'com.trustblocks.concerto.generator-parsed-test
                                        'com.trustblocks.concerto.parser-test))]
        (when babashka?
          (println "  (skipping parser-test: instaparse does not run under babashka)"))
@@ -59,6 +69,7 @@
                   'com.trustblocks.concerto.conformance-test
                   'com.trustblocks.concerto.conformance-validate-test
                   'com.trustblocks.concerto.malli-parsed-test
+                  'com.trustblocks.concerto.json-schema-test
                   'com.trustblocks.concerto.parser-test)))
 
 #?(:cljs (-main))

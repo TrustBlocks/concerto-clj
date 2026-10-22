@@ -12,7 +12,16 @@
   ;; The runner is plain clojure.test with no extra dependency, so the same
   ;; command works under babashka (bb -m runner) and the core tests need no
   ;; Node -- fixtures are checked in under test-resources/.
+  ;; What sample generation needs, which a consumer adds to use it. test.chuck is
+  ;; for a String with a regex validator; leave it out if you have none. The
+  ;; scripts in script/sample_differential/ run under this alias.
+  :generators
+  {:extra-deps {org.clojure/test.check       {:mvn/version "1.1.1"}
+                com.gfredericks/test.chuck {:mvn/version "0.2.15"}}}
+
   :test  {:extra-paths ["test" "test-resources"]
+          :extra-deps  {org.clojure/test.check       {:mvn/version "1.1.1"}
+                        com.gfredericks/test.chuck {:mvn/version "0.2.15"}}
           :main-opts   ["-m" "com.trustblocks.concerto.test-runner"]}
 
   ;; clojure -M:cljs-test

@@ -40,6 +40,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `com.trustblocks.concerto.generator`: valid sample instances from a model --
+  `generate`, `sample`, and a test.check `generator`. Every instance validates
+  against the schema compiled for the same type and version; 432 samples across the
+  cicero-template-library were also all accepted by concerto-core 5.2.1.
+- `com.trustblocks.concerto.json-schema`: a model as JSON Schema (draft 7), from
+  the same compiled schema, so the two agree: 2,592 of 2,592 mutated instances,
+  through Ajv.
+- `->schema` `:generators true`, which annotates the schema for generation without
+  changing what it accepts; and generator and JSON Schema properties on the named
+  schemas (`:concerto/date-time`, `:concerto/double`, ...), which change nothing
+  and need no new dependency until something generates.
+- The `:generators` alias in `deps.edn`: test.check and test.chuck.
+- `script/sample_differential/`: the two differentials above, reproducibly.
+
 - `com.trustblocks.concerto.model-check`: Concerto's model-level validation, as
   `check` (problems as data, with the rule id and exception class) and `check!`
   (throws the first). Opt-in. Covers declarations, properties, inheritance,
