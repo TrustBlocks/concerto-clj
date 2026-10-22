@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The CTO parser refuses a default of the wrong kind, as Concerto's does: an Integer
+  or Long takes an integer, a Double needs a decimal point (`1.5`, not `1`, `.5` or
+  `1e3`), a Boolean `true` or `false`, and a String, DateTime, enum or object a
+  string. It accepted any literal, so a model Concerto cannot load parsed fine; 17
+  of 34 cases checked differed, and all agree now. It also refused `default=+5`,
+  which Concerto takes. The 237-file differential only had valid files, which is
+  why it never saw this.
 - A default value is checked against its own field's validators (length, pattern,
   range), on properties and scalars, with Concerto's messages: the string checks
   skip an empty default, the number checks do not skip 0, and numbers print as
