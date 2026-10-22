@@ -21,8 +21,10 @@
   inferred, and each is exercised by concerto-conformance's `semantic/` suite.
   See README for what is not covered."
   (:require [clojure.string :as str]
+            [com.trustblocks.concerto.malli :as cm]
             [com.trustblocks.concerto.metamodel :as mm]
-            [com.trustblocks.concerto.metamodel-schema :as schema]))
+            [com.trustblocks.concerto.metamodel-schema :as schema]
+            [malli.core :as m]))
 
 (def ^:private ^:dynamic *options*
   "The `ModelManager` options of the `check` in progress. Bound there, and read
@@ -442,23 +444,53 @@
    (when (some #(= "ImportAll" (kind %)) (:imports model))
      [(problem :MODEL_FILE_001 "Wildcard Imports are not permitted." :class "Error")])))
 
-(defn- unexpected-properties
-  "The first AST node, depth first, carrying a property its metamodel class does
-  not declare, as [class [names...]]."
-  [x]
-  (cond
-    (map? x)
-    (or (when-let [c (mm/metamodel-type (:$class x))]
-          (when-let [allowed (get schema/properties c)]
-            (let [extra (sort (remove (set allowed) (map name (keys x))))]
-              (when (seq extra) [(:$class x) extra]))))
-        (some unexpected-properties (vals x)))
-    (sequential? x) (some unexpected-properties x)))
+(def ^:private metamodel-validator
+  "The metamodel as a schema, compiled by this library's own compiler (see
+  script/gen_metamodel_schema.clj), so a model AST is checked as the instance of
+  the metamodel that it is: required properties, value types, arrays, and
+  properties the metamodel does not declare."
+  (delay (m/schema schema/form {:registry cm/registry*})))
 
-(defn- metamodel-validation-problems [model]
-  (when-let [[c extra] (unexpected-properties model)]
-    [(problem :METAMODEL_001
-              (str "Unexpected properties for type " c ": " (str/join ", " extra))
+(defn- json-path
+  "A path into the model as Concerto writes it: `$.declarations[0].name`."
+  [in]
+  (apply str "$" (map #(if (integer? %) (str "[" % "]") (str "." (name %))) in)))
+
+(defn- declared-type
+  "Concerto's name for what the metamodel declares at `in`: `Boolean`,
+  `Declaration`. A trailing array index belongs to its array's property."
+  [model in]
+  (let [in  (loop [in (vec in)] (if (and (seq in) (integer? (peek in))) (recur (pop in)) in))
+        cls (some-> (get-in model (pop in)) :$class mm/metamodel-type)]
+    (if (empty? in)
+      "Model"
+      (get-in schema/properties [cls (name (peek in)) 0] "?"))))
+
+(defn- metamodel-error-message [model errors]
+  (let [extra   (filter #(= ::m/extra-key (:type %)) errors)
+        by-node (group-by (comp pop :in) extra)]
+    (if (seq extra)
+      ;; Properties the metamodel does not declare. All of a node's at once.
+      (let [parent (pop (:in (first extra)))
+            keys-  (sort (map (comp name peek :in) (get by-node parent)))]
+        (str "Unexpected properties for type " (:$class (get-in model parent)) ": "
+             (str/join ", " keys-)))
+      (let [{:keys [in type schema]} (first errors)]
+        (if (= ::m/missing-key type)
+          (str "The instance \"" (:$class (get-in model (pop in)))
+               "\" is missing the required field \"" (name (peek in)) "\".")
+          (let [t (declared-type model in)]
+            (if (and (= ::m/invalid-type type) (= :sequential (m/type schema)))
+              (str "Expected value at path `" (json-path in) "` to be an array of type `" t "`")
+              (str "Expected value at path `" (json-path in) "` to be of type `" t "`"))))))))
+
+(defn- metamodel-validation-problems
+  "`MetaModel.validateMetaModel`, run when a model is added with validation and the
+  `:metamodelValidation` option on: the first thing wrong with the AST, as a
+  MetamodelException."
+  [model]
+  (when-let [errors (seq (:errors (m/explain @metamodel-validator model)))]
+    [(problem :METAMODEL_001 (metamodel-error-message model errors)
               :class "MetamodelException")]))
 
 (defn- import-problems
@@ -685,13 +717,14 @@
     (vec
      (concat
       (mapcat metamodel-problems models)
-      ;; reading each model
-      (for [m models, p (namespace-problems m)] p)
+      ;; adding each model: it is built, which reads its names and elements, and
+      ;; then, if it was added with validation, checked against the metamodel
       (for [[m validated?] (map vector models (concat validate-on-load (repeat false)))
-            :when (and validated? (:metamodelValidation options))
-            p (metamodel-validation-problems m)]
+            p (concat (namespace-problems m)
+                      (for [d (:declarations m), p (declaration-read-problems m d)] p)
+                      (when (and validated? (:metamodelValidation options))
+                        (metamodel-validation-problems m)))]
         p)
-      (for [m models, d (:declarations m), p (declaration-read-problems m d)] p)
       ;; validating them
       (for [m models
             p (concat (import-problems idx m)

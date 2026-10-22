@@ -143,8 +143,9 @@
     (<= d ([31 (if leap? 29 28) 31 30 31 30 31 31 30 31 30 31] (dec mo)))))
 
 (def date-time-strict
-  "Concerto 5 DateTime. Selected by `->schema`'s `:concerto-version 5`; the
-  looser `date-time` stays the default because it is what 3.x and 4.x enforce."
+  "Concerto 5.2+ DateTime. Selected by `->schema`'s `:concerto-version \"5.2\"`;
+  the looser `date-time` stays the default because it is what 3.x, 4.x, 5.0 and
+  5.1 enforce."
   [:and :string
    [:re {:error/message "should be a date-time"} date-time-strict-pattern]
    [:fn {:error/message "should be a date that exists"} real-date?]])
@@ -341,10 +342,46 @@
 
 (declare object-schema)
 
-(def ^:private ^:dynamic *strict*
-  "True while compiling for Concerto 5, whose validator enforces a scalar's own
-  constraints on map keys. Bound by `->schema`."
-  false)
+(def ^:private ^:dynamic *version*
+  "The [major minor] of the Concerto validator being agreed with. Bound by
+  `->schema`; see `parse-version`."
+  [4 0])
+
+(defn- at-least? [major minor]
+  (>= (compare *version* [major minor]) 0))
+
+(defn- relationship-maps
+  "How `map M { o K --> Asset }` values are held, which differs by version:
+
+    :unsupported  3.x cannot load the model at all.
+    :embedded     4.x, 5.0, 5.1: the value is the embedded resource, `$class`
+                  and all; a `resource:` string is rejected.
+    :reference    5.2 on (concerto-core #1567): the value is the referenced
+                  identifier, a string, and an embedded resource is rejected.
+
+  Each was run against concerto-core 3.16.7, 4.2.0, 5.0.0, 5.1.0, 5.2.0, 5.2.1."
+  []
+  (cond (at-least? 5 2) :reference
+        (at-least? 4 0) :embedded
+        :else           :unsupported))
+
+(defn- parse-version
+  "`:concerto-version` as [major minor]. An integer is that major version's
+  earliest release (`5` is 5.0); a string `\"5.2\"` or `\"5.2.1\"` names the
+  minor too, which is what separates 5.0/5.1 from 5.2 on."
+  [v]
+  (let [parts (cond
+                (integer? v) [v 0]
+                (and (string? v) (re-matches #"\d+(\.\d+){0,2}" v))
+                (mapv #?(:clj #(Long/parseLong %) :cljs #(js/parseInt % 10))
+                      (take 2 (concat (str/split v #"\.") ["0"])))
+                :else nil)]
+    (when-not (and parts (#{3 4 5} (first parts)))
+      (throw (ex-info (str "Unsupported :concerto-version " (pr-str v)
+                           ". This library has been checked against 3.x, 4.x and 5.x; "
+                           "give a major version (3, 4, 5) or a string such as \"5.2\".")
+                      {:concerto-version v :supported [3 4 5]})))
+    (vec parts)))
 
 (def ^:private ^:dynamic *maps-in-progress*
   "Map declarations being compiled, outermost first. A map is inlined where it
@@ -359,7 +396,7 @@
   scalar key depends on the version: 3.x and 4.x hold the key to the underlying
   primitive only -- `concerto validate` accepts `USA` as a key of a map keyed by
   `scalar Code extends String regex=/^[A-Z]{2}$/` -- while 5.x enforces the
-  scalar's constraints as well. `*strict*` selects between them."
+  scalar's constraints as well -- from 5.2.0 on (#1568); 5.0 and 5.1 do not."
   [reg fqn {:keys [$class type]}]
   (case (mm/metamodel-type $class)
     "StringMapKeyType"   :concerto/map-key
@@ -379,7 +416,7 @@
                                "of them as map keys.")
                           {:map fqn :type t})))
         (cond
-          *strict*  [:concerto/string-key
+          (at-least? 5 2) [:concerto/string-key
                      (constrained (if (= :string base) base :concerto/date-time-key)
                                   (declaration-of reg t))]
           (= :string base) :concerto/map-key
@@ -394,10 +431,17 @@
   (let [kind (mm/metamodel-type $class)]
     (case kind
       "ObjectMapValueType" (object-schema reg subtypes (mm/type-fqn type) key-fn)
-      ;; As a RelationshipProperty: the referenced identifier. Concerto 5 loads
-      ;; these (3.x refuses the model), and both a bare id and a
-      ;; `resource:` URI are strings.
-      "RelationshipMapValueType" :string
+      "RelationshipMapValueType"
+      (case (relationship-maps)
+        ;; As a RelationshipProperty: the referenced identifier, a bare id or a
+        ;; `resource:` URI -- both strings.
+        :reference :string
+        ;; An embedded resource, as 4.x, 5.0 and 5.1 read it.
+        :embedded  (object-schema reg subtypes (mm/type-fqn type) key-fn)
+        (throw (ex-info (str "Map " (pr-str fqn) " has a relationship value, which "
+                             "Concerto 3.x cannot load. Refusing to emit a schema "
+                             "for a model that version rejects.")
+                        {:map fqn :concerto-version *version*})))
       (or (scalar (str/replace kind #"MapValueType$" "Property"))
           (throw (ex-info (str "Cannot compile the value of map " (pr-str fqn) ": "
                                (pr-str $class) " is not a map value type this "
@@ -540,7 +584,9 @@
              ;; see `object-schema`.
              (if (or root? (abstract? reg fqn))
                [(key-fn "$class") [:= fqn]]
-               [(key-fn "$class") {:optional true} [:= fqn]])
+               ;; Concerto treats a null or empty $class as absent, so the
+               ;; declared type is read in its place.
+               [(key-fn "$class") {:optional true} [:maybe [:enum fqn ""]]])
              [(key-fn "$identifier") {:optional true} :string]]
 
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
@@ -583,7 +629,9 @@
       (cond
         (= "MapDeclaration" kind)
         (let [v (:value (declaration-of reg t))]
-          (when (= "ObjectMapValueType" (mm/metamodel-type (:$class v)))
+          (when (or (= "ObjectMapValueType" (mm/metamodel-type (:$class v)))
+                    (and (= "RelationshipMapValueType" (mm/metamodel-type (:$class v)))
+                         (= :embedded (relationship-maps))))
             (type-targets reg subtypes (mm/type-fqn (:type v)) (conj seen t))))
 
         (inline-kind? kind) nil
@@ -655,19 +703,23 @@
   A model with nothing nested emits as a plain map, since there is nothing to
   reference.
 
-  `:concerto-version` is the major version of the validator to agree with: 3, 4
-  (the default) or 5. They differ where 5 is stricter -- DateTime must be a real
-  `YYYY-MM-DDTHH:mm:ss[.f]Z|+HH:MM`, where 3.x and 4.x accept a bare year or a
-  date alone -- and where a scalar's constraints apply to a map key."
+  `:concerto-version` is the validator to agree with: a major version (3, 4,
+  the default 4, or 5, which is 5.0) or a string naming the minor, `\"5.2\"`. What
+  changes, and where (each run against concerto-core 3.16.7, 4.2.0, 5.0.0,
+  5.1.0, 5.2.0 and 5.2.1):
+
+    from 5.2.0   a DateTime must be a real `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or
+                 `+/-HH:MM` (earlier versions accept a bare year or a date
+                 alone), and a scalar's constraints apply to a map key
+    relationship map values   see `relationship-maps`
+
+  Nothing separates 3, 4 and 5.0 otherwise: 5.0 is not the strict one."
   [reg fqn & {:keys [key-fn closed concerto-version]
               :or   {key-fn keyword closed true concerto-version 4}}]
-  (when-not (#{3 4 5} concerto-version)
-    (throw (ex-info (str "Unsupported :concerto-version " (pr-str concerto-version)
-                         ". This library has been checked against 3, 4 and 5.")
-                    {:concerto-version concerto-version :supported [3 4 5]})))
+  (let [version (parse-version concerto-version)]
   (when (empty? (mm/super-chain reg fqn))
     (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
-  (binding [*strict* (= 5 concerto-version)]
+  (binding [*version* version]
    (let [subtypes (subtype-index reg)
          needed   (referenced reg subtypes fqn)
          root     (object-schema reg subtypes fqn key-fn true)
@@ -697,10 +749,10 @@
                      (if (= :ref (first root))
                        [:and [:map [(key-fn "$class") :string]] root]
                        root)])]
-     (m/schema (if *strict*
+     (m/schema (if (at-least? 5 2)
                  (walk/postwalk-replace {:concerto/date-time :concerto/date-time-strict} form)
                  form)
-               {:registry registry*}))))
+               {:registry registry*})))))
 
 (defn ->edn
   "The schema as plain EDN, ready to spit to a file.

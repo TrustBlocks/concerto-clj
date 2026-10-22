@@ -108,27 +108,36 @@ the guarantee this library offers is the one Concerto offers.
 
 ### Which Concerto
 
-The validator this library agrees with is not one fixed thing: Concerto 5 is
-stricter than 3.x and 4.x, and the schemas it produces differ accordingly.
-Choose with `:concerto-version` (3, 4 or 5; the default is 4, and 3 and 4 behave
-the same):
+The validator this library agrees with is not one fixed thing, and the break is
+not where the major version is: **5.0 and 5.1 behave like 4.x; the strictness
+arrived in 5.2.0.** Choose with `:concerto-version`: a major version (`3`, `4`,
+`5`, where an integer means that major's first release, so `5` is 5.0) or a
+string that names the minor. The default is `4`.
 
 ```clojure
-(cm/->schema reg fqn)                       ; 3.x / 4.x
-(cm/->schema reg fqn :concerto-version 5)   ; 5.x
+(cm/->schema reg fqn)                           ; 3.x / 4.x, the default
+(cm/->schema reg fqn :concerto-version 5)       ; 5.0 and 5.1 -- the same as 4
+(cm/->schema reg fqn :concerto-version "5.2")   ; 5.2.0 and later
 ```
 
-| | 3.x / 4.x | 5.x |
-|---|---|---|
-| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
-| scalar's constraints on a map key | not checked | checked |
-| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | checked |
-| DateTime map key | loose | loose, unchanged |
+| | 3.x | 4.x, 5.0, 5.1 | 5.2 and later |
+|---|---|---|---|
+| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | same | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
+| scalar's constraints on a map key | not checked | not checked | checked |
+| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | same | checked |
+| DateTime map key | loose | loose | loose, unchanged |
+| `--> Asset` map value | model refused | the embedded resource, `$class` and all; a `resource:` string is rejected | the referenced identifier, a string; an embedded resource is rejected |
 
-Each cell was observed by running `concerto validate` with concerto-core 3.16.7,
-4.2.0 and 5.2.1 (3.16.7 and 4.2.0 agree on every case), and the test suite
-carries the DateTime tables for both behaviors. Metamodel JSON is identical
-across the two, so the parser, fixtures and registry do not depend on the choice.
+Each cell was observed by running Concerto, not read from release notes: 3.16.7
+through `concerto validate`, and 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1 through
+concerto-core's `Serializer`. The boundary is exact: 5.1.0 matches 5.0.0, and
+5.2.0 matches 5.2.1. The test suite carries the DateTime tables for both
+behaviors. Metamodel JSON is identical across all of them, so the parser,
+fixtures and registry do not depend on the choice.
+
+(Concerto's maintainers are also building a Rust engine for a future 6.0 that
+deliberately returns to the 5.0 behavior for `--> Asset` map values, so that
+cell may move again.)
 
 A property whose declared type has several concrete subtypes compiles to a
 `:multi` dispatching on `$class`, because Concerto permits polymorphism and a
@@ -428,7 +437,7 @@ the property rather than compiling to something that accepts any value.
 [concerto-conformance](https://github.com/accordproject/concerto-conformance),
 vendored as written; `conformance_validate_test.cljc` reads its `.feature` files
 and runs every scenario (42, with the `Scenario Outline` examples expanded) at
-`:concerto-version` 4 and 5. All pass. One passes by declining to compile a schema
+`:concerto-version` 4, 5 and "5.2". All pass. One passes by declining to compile a schema
 for a `$class` the model does not declare, which is a refusal and not a verdict.
 
 The suite's other half, `semantic/` (116 scenarios, outlines expanded), tests
@@ -448,8 +457,8 @@ identifier fields, undeclared and relationship types, validators (regex, string
 length, number range, collection size), maps (key, value, nesting), scalars,
 duplicate decorators, imports (unloaded namespaces, undeclared types, two versions
 of one namespace, aliases, wildcards, unversioned namespaces), decorator
-validation (`:decoratorValidation` options) and, with `:metamodelValidation`,
-AST properties the metamodel does not declare. It is opt-in: nothing calls it
+validation (`:decoratorValidation` options) and, with `:metamodelValidation`, the
+model AST itself against the metamodel (see below). It is opt-in: nothing calls it
 unless you do. It raised nothing on any of the 237 model files of the
 cicero-template-library.
 
@@ -467,13 +476,36 @@ Where the suite and 5.2.1 disagree, `model-check` follows 5.2.1. A scenario that
 fails neither way goes in `known-failures.edn`, which the test requires to still
 fail; it is empty.
 
-Not covered: `:metamodelValidation` checks only for unexpected AST properties, not
-for missing required ones or wrong value types; decorators on the model itself (as
-opposed to its declarations and properties) are not validated; and a default
-value is not checked against its field's validators.
+Not covered: decorators on the model itself (as opposed to its declarations and
+properties) are not validated, and a default value is not checked against its
+field's validators.
 
-The allowed AST properties come from `metamodel_schema.cljc`, generated from
-concerto-metamodel's own CTO by `script/gen_metamodel_schema.clj`.
+**Metamodel validation** compiles the metamodel's own CTO with this library's
+compiler (`metamodel_schema.cljc`, generated by `script/gen_metamodel_schema.clj`)
+and checks the model AST as an instance of it: required properties, value types,
+arrays, and properties the metamodel does not declare, reported as concerto-core's
+`MetamodelException` with its wording. It runs when a model is added with
+validation (`:validate-on-load`) and `:metamodelValidation` is on, after the
+model's names and elements have been read, as in Concerto.
+
+It was checked two ways beyond the suite: against every AST in the suite's
+specifications and in `fixtures/` (source locations included), which it accepts
+apart from the six built to be malformed; and by a differential against concerto-core
+5.2.1's `MetaModel.validateMetaModel` over 6,000 seeded random mutations of those
+ASTs (`script/metamodel_differential/`) (a key deleted, a value of the wrong type, a property added, a `$class`
+swapped or dropped, a value nulled). 5,884 agree. The other 116 are understood:
+
+- 111 are the identifier regex. The metamodel puts JavaScript's `u`-flag identifier
+  regex on three `name` properties, which the compiler refuses to emit because the
+  JVM and JavaScript disagree on that flag, so the generator drops them. A bad name
+  is still caught, with Concerto's own `IllegalModelException`, when the model is
+  read, which in Concerto comes first.
+- 4 are JavaScript coercion: a number where an object is declared
+  (`lengthValidator: 5`) populates an object with no properties, so Concerto
+  accepts it. This library rejects it.
+- 1 is an undeclared property whose value is `null`, which Concerto ignores and a
+  closed map here rejects. It is not specific to the metamodel: the same holds for
+  any instance, and is a known small false rejection.
 
 ## Status
 
