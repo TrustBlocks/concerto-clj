@@ -1,0 +1,6 @@
+namespace org.concerto.maps.invalid.value001@1.0.0
+
+map MyMap {
+  o String
+  o UnknownType
+}

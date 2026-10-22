@@ -1,0 +1,5 @@
+namespace org.concerto.scalars.valid.str001@1.0.0
+
+concept Name {
+  o String name length=[3, 20]
+}

@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A nested concept, array element or map value may omit its `$class`; Concerto
+  reads it as the declared type. Schemas required it everywhere, rejecting valid
+  data. The root still requires it, as does an abstract declared type.
+- A field with a `default` may be omitted.
+- The CTO grammar parses `size=[min,max]`, which it did not, so any model with a
+  collection size validator failed to parse without the CLI.
+- `bb -m ...test-runner` loaded the Clojure parser (via `malli-test`) and could
+  not start under babashka. The tests needing the parser are now their own
+  namespace, skipped there like `parser-test`.
 - An explicit `null` on an optional property is accepted, as Concerto does, and
   no longer rejected as the wrong type. It was the only disagreement with the
   CLI across the 108 sample and request instances in the cicero-template-library
@@ -16,6 +25,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   emits `StringMapKeyType`, `IntegerMapValueType` and the rest, as the CLI does.
 
 ### Added
+
+- `com.trustblocks.concerto.model-check`: Concerto's model-level validation, as
+  `check` (problems as data, with the rule id and exception class) and `check!`
+  (throws the first). Opt-in. Covers declarations, properties, inheritance,
+  identifiers, relationships, validators, maps, scalars, imports, namespaces,
+  decorator validation and metamodel validation, following concerto-core 5.2.1.
+  All 116 scenarios of concerto-conformance's `semantic/` suite are accounted for:
+  108 pass, 8 are held to 5.2.1's own behavior where it fails the suite
+  (`core-disagrees.edn`). Raises nothing on the 237 model files of the
+  cicero-template-library.
+- `script/gen_metamodel_schema.clj` and the generated `metamodel-schema`: the
+  properties each metamodel class may carry, from concerto-metamodel's CTO.
+- The `validate/` suite of concerto-conformance is vendored and run in full
+  (42 scenarios, at `:concerto-version` 4 and 5).
 
 - `MapDeclaration` compiles to `:map-of`, inlined where used. Keys may be
   String, DateTime, or a scalar of either; values may be any primitive, enum,

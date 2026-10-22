@@ -1,0 +1,21 @@
+;; Scenarios where concerto-core 5.2.1 itself does not satisfy the suite. For each,
+;; model-check is held to what 5.2.1 does -- whether it rejects the models and, where
+;; 5.2.1 gives one, the exception class -- not to the suite's assertion.
+{
+  "concepts: Unique property names across inheritance #2" {:core-ok false :class nil
+   :why "core overflows the stack (RangeError) on a cyclic supertype chain; model-check reports the cycle"}
+  "enums: Enum name conflicts with imported enum should throw an error" {:core-ok false :class "IllegalModelException"
+   :why "the suite asserts older wording ('already defined in an imported model'); 5.2.1 says it clashes with an imported type"}
+  "imports: Conflict with imported type name should throw an error" {:core-ok false :class "IllegalModelException"
+   :why "the suite asserts older wording ('already defined in an imported model'); 5.2.1 says it clashes with an imported type"}
+  "imports: Duplicate namespace imports should throw an error" {:core-ok true :class nil
+   :why "5.2.1 accepts importing the same namespace twice"}
+  "maps: Non-existent map value type should throw error" {:core-ok false :class "IllegalModelException"
+   :why "the suite asserts a JavaScript crash message ('Cannot read properties of null'); 5.2.1 reports an undeclared type"}
+  "namespaces: Invalid duplicate declared names from different namespace imports should throw an error" {:core-ok true :class nil
+   :why "5.2.1 accepts it"}
+  "namespaces: Invalid duplicate namespace imports should throw an error" {:core-ok true :class nil
+   :why "5.2.1 accepts it"}
+  "namespaces: Invalid self-import should throw MODEL_FILE_003 error" {:core-ok false :class "IllegalModelException"
+   :why "the suite asserts 'Namespace is not defined for type'; 5.2.1 reports a clash with an imported type"}
+}

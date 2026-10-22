@@ -1,0 +1,10 @@
+namespace org.example.property002.valid@1.0.0
+
+concept User identified by id {
+  o String id
+  o Profile profile
+}
+
+concept Profile {
+  o String bio
+}

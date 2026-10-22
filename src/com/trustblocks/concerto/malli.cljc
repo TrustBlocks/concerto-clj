@@ -420,8 +420,13 @@
 
 (defn- object-schema
   "Schema for a value declared as `fqn`: the enum, or a reference to the one
-  concrete type it can be, or a dispatch over every concrete type it could be."
-  [reg subtypes fqn key-fn]
+  concrete type it can be, or a dispatch over every concrete type it could be.
+
+  Nested, a value may leave out its `$class`: Concerto reads it as the declared
+  type, and refuses only when that type is abstract. The root (`root?`) has
+  nothing to infer it from, so its `$class` is required."
+  ([reg subtypes fqn key-fn] (object-schema reg subtypes fqn key-fn false))
+  ([reg subtypes fqn key-fn root?]
   (cond
     (nil? (declaration-of reg fqn))
     (throw (ex-info (str "Unresolved type " (pr-str fqn) ". Its model is not "
@@ -449,10 +454,18 @@
         ;; abstract declaration is the honest reading: its own properties are
         ;; required, and no instance can legitimately be only this type.
         0 [:ref fqn]
-        1 [:ref (first concrete)]
+        1 (if (and (not root?) (abstract? reg fqn))
+            ;; An abstract type with a single concrete subtype: the subtype's
+            ;; entry would let the $class be left out, which Concerto refuses.
+            [:and [:map [(key-fn "$class") :string]] [:ref (first concrete)]]
+            [:ref (first concrete)])
         (into [:multi {:dispatch (key-fn "$class")}]
-              (map (fn [c] [c [:ref c]]))
-              concrete)))))
+              (concat (map (fn [c] [c [:ref c]]) concrete)
+                      ;; No $class at all: the declared type, if it is itself
+                      ;; concrete. An unknown $class still falls here and fails
+                      ;; on the entry's own `[:= fqn]`.
+                      (when (and (not root?) (not (abstract? reg fqn)))
+                        [[::m/default [:ref fqn]]]))))))))
 
 (defn- property->schema [reg subtypes prop key-fn]
   (let [kind (mm/metamodel-type (:$class prop))
@@ -519,11 +532,15 @@
 
   A closed map has to admit whatever Concerto admits, or it turns a valid
   instance into a false rejection."
-  [reg fqn key-fn]
+  [reg fqn key-fn root?]
   (let [kind (mm/metamodel-type (:$class (declaration-of reg fqn)))]
     (cond-> [;; $class is the linchpin: it is what makes the flattening
-             ;; lossless, and what :multi dispatches on.
-             [(key-fn "$class") [:= fqn]]
+             ;; lossless, and what :multi dispatches on. Required at the root
+             ;; and on an abstract type, optional on a nested concrete one --
+             ;; see `object-schema`.
+             (if (or root? (abstract? reg fqn))
+               [(key-fn "$class") [:= fqn]]
+               [(key-fn "$class") {:optional true} [:= fqn]])
              [(key-fn "$identifier") {:optional true} :string]]
 
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
@@ -532,12 +549,13 @@
 (defn- declaration->map
   "One declaration as a map schema, with its whole inheritance chain flattened
   into it, parents first."
-  [reg subtypes fqn key-fn closed]
+  [reg subtypes fqn key-fn closed root?]
   (check-compilable! reg fqn)
   (let [entries (for [f    (reverse (mm/super-chain reg fqn))
                       prop (:properties (declaration-of reg f))]
                   (let [k (key-fn (:name prop))]
-                    (if (:isOptional prop)
+                    ;; A default makes a field omittable: Concerto fills it in.
+                    (if (or (:isOptional prop) (some? (:defaultValue prop)))
                       ;; An explicit null on an optional property means the
                       ;; same as leaving it out -- `concerto validate` accepts
                       ;; `"deliveredAt": null` and drops it. Only the property
@@ -546,7 +564,7 @@
                       [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]]
                       [k (property->schema reg subtypes prop key-fn)])))]
     (into (into [:map (cond-> {} closed (assoc :closed true))]
-                (system-properties reg fqn key-fn))
+                (system-properties reg fqn key-fn root?))
           (ordered entries))))
 
 (defn- inline-kind?
@@ -652,7 +670,7 @@
   (binding [*strict* (= 5 concerto-version)]
    (let [subtypes (subtype-index reg)
          needed   (referenced reg subtypes fqn)
-         root     (object-schema reg subtypes fqn key-fn)
+         root     (object-schema reg subtypes fqn key-fn true)
          form     (cond
                     ;; An enum or scalar root is a value, not a tagged object,
                     ;; so object-schema has already produced the whole thing.
@@ -661,7 +679,7 @@
                     ;; Nothing to reference: emit the map itself, so a simple
                     ;; model stays readable as a simple schema.
                     (and (= [:ref fqn] root) (not (references? reg fqn)))
-                    (declaration->map reg subtypes fqn key-fn closed)
+                    (declaration->map reg subtypes fqn key-fn closed true)
 
                     :else
                     [:schema
@@ -672,9 +690,13 @@
                      ;; reproducible.
                      {:registry (into {}
                                       (map (fn [f]
-                                             [f (declaration->map reg subtypes f key-fn closed)]))
+                                             [f (declaration->map reg subtypes f key-fn closed false)]))
                                       (sort needed))}
-                     root])]
+                     ;; The registry entries let a nested value omit its
+                     ;; $class; the root may not.
+                     (if (= :ref (first root))
+                       [:and [:map [(key-fn "$class") :string]] root]
+                       root)])]
      (m/schema (if *strict*
                  (walk/postwalk-replace {:concerto/date-time :concerto/date-time-strict} form)
                  form)

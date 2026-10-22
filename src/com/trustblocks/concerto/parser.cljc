@@ -134,6 +134,12 @@
       (some? minl) (assoc :minLength minl)
       (some? maxl) (assoc :maxLength maxl))))
 
+(defn- ->size-validator [node]
+  (let [mins (bound :min-size node) maxs (bound :max-size node)]
+    (cond-> {:$class (str mm "CollectionSizeValidator")}
+      (some? mins) (assoc :minSize mins)
+      (some? maxs) (assoc :maxSize maxs))))
+
 ;; ---------------------------------------------------------------- properties
 
 (defn- ->field [node]
@@ -145,6 +151,7 @@
         regex     (when v (child :regex-validator v))
         range-v   (when v (child :range-validator v))
         len       (child :length-validator node)
+        sz        (child :size-validator node)
         d         (child :default node)]
     (cond-> {:$class     (str mm (or primitive "ObjectProperty"))
              :name       nm
@@ -155,6 +162,7 @@
       regex   (assoc :validator (->regex-validator regex))
       range-v (assoc :validator (->domain-validator range-v type-name))
       len     (assoc :lengthValidator (->length-validator len))
+      sz      (assoc :sizeValidator (->size-validator sz))
       true    (with-decorators node))))
 
 (defn- ->relationship [node]

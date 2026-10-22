@@ -1,0 +1,5 @@
+namespace org.concerto.scalars.valid.str002@1.0.0
+
+concept Code {
+  o String code length=[1, 10]
+}

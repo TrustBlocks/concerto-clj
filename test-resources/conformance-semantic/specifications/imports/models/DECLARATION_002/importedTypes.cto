@@ -1,0 +1,9 @@
+namespace org.concerto.imports.external.types@1.0.0
+
+enum Type {
+    o VALUE
+}
+
+enum AnotherType{
+    o VALUE
+}

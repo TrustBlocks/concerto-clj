@@ -1,0 +1,9 @@
+namespace org.concerto.concepts.cd005.scalaridinvalid@1.0.0
+
+scalar CustomString extends String
+
+concept Book identified by isbn {
+  o CustomString isbn
+  o String title
+}
+

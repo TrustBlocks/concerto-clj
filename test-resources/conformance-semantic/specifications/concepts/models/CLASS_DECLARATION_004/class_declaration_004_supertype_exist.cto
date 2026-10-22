@@ -1,0 +1,10 @@
+namespace org.concerto.concepts.cd004.valid@1.0.0
+
+concept BaseConcept {
+  o String baseProperty
+}
+
+concept DerivedConcept extends BaseConcept {
+  o String detail
+}
+

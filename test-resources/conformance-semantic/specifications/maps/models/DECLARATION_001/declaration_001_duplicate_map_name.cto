@@ -1,0 +1,11 @@
+namespace org.concerto.maps.invalid.name001@1.0.0
+
+map MyDuplicateMap {
+  o String
+  o String
+}
+
+map MyDuplicateMap {
+  o String
+  o String
+}

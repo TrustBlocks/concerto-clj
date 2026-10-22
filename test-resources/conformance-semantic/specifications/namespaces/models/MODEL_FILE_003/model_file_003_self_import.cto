@@ -1,0 +1,7 @@
+namespace org.concerto.namespaces.modelfilethree.invalid@1.0.0
+
+import org.concerto.namespaces.modelfilethree.invalid@1.0.0.LocalType
+
+concept LocalType {
+  o String VALUE
+}
