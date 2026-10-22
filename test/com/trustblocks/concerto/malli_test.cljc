@@ -582,9 +582,10 @@
 ;; ----------------------------------------------------------------------- maps
 
 (def ^:private maps-cto
-  "Every expectation below was run through `concerto validate` (4.x, with
-  ENABLE_MAP_TYPE=true) before being written down, except where a test says it
-  deliberately differs."
+  "Every expectation below was run through `concerto validate` (concerto-core
+  4.2.0, with ENABLE_MAP_TYPE=true) before being written down, except where a
+  test says it deliberately differs. The `:concerto-version 5` tests were run
+  against 5.2.1."
   (str "namespace m@1.0.0\n"
        "scalar Code extends String regex=/^[A-Z]{2}$/\n"
        "enum Colour { o RED o BLUE }\n"
@@ -599,11 +600,12 @@
        "map S2B { o String o Boolean }\n"
        "map S2Code { o String o Code }\n"
        "map S2Nest { o String o S2I }\n"
+       "map S2Rel { o String --> Thing }\n"
        "map Loop { o String o Loop }\n"
        "concept H {\n"
        " o S2I a optional\n o D2S d optional\n o C2S c optional\n"
        " o S2Item i optional\n o S2Col col optional\n o S2Thing t optional\n"
-       " o S2B b optional\n o S2Code sc optional\n o S2Nest nest optional\n}\n"
+       " o S2B b optional\n o S2Code sc optional\n o S2Nest nest optional\n o S2Rel rel optional\n}\n"
        "concept Cyc { o Loop loop }\n"
        "concept OnlyStrings { o S2I a }\n"))
 
@@ -698,3 +700,133 @@
       (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                             #"Unsupported regex flag"
                             (cm/->schema reg "u@1.0.0.U"))))))
+
+;; -------------------------------------------------------------- concerto 5
+
+(def ^:private datetime-envelope-5
+  "Every case run through `concerto validate` 5.2.1, with the verdict it gave.
+
+  5.x is strict where 3.x and 4.x are loose (see `datetime-envelope`): seconds
+  and an offset are required, and the date has to exist."
+  [["2019-01-20T01:00:00Z"             true]
+   ["2019-01-20T01:00:00.000+01:00"    true]
+   ["2019-01-20T01:00:00.123456+01:00" true]
+   ["2019-01-20T01:00:00.1Z"           true]
+   ["2019-01-20T01:00:00-05:00"        true]
+   ["2019-01-20T01:00:00+00:00"        true]
+   ["2019-01-20T01:00:00+23:59"        true]
+   ["2019-01-20T01:00:00+01:30"        true]
+   ["2020-02-29T00:00:00Z"             true]
+   ["2000-02-29T00:00:00Z"             true]
+   ["2019-04-30T00:00:00Z"             true]
+   ["0000-01-01T00:00:00Z"             true]
+   ["9999-12-31T23:59:59Z"             true]
+   ["2019-01-20T01:00:00+0100"         false]
+   ["2019-01-20T01:00:00+24:00"        false]
+   ["2019-01-20T01:00:00+01:60"        false]
+   ["2019-01-20T01:00:00+01"           false]
+   ["2019-01-20T01:00:00"              false]
+   ["2019-01-20T01:00Z"                false]
+   ["2019-01-20T01Z"                   false]
+   ["2019-01-20Z"                      false]
+   ["2019-01-20"                       false]
+   ["2019-01"                          false]
+   ["2019"                             false]
+   ["20190120"                         false]
+   ["20190120T010000Z"                 false]
+   ["+2019-01-20T01:00:00Z"            false]
+   ["2019-01-20 01:00:00Z"             false]
+   ["2019-01-20t01:00:00z"             false]
+   ["2019-01-20T01:00:00z"             false]
+   ["2019-01-20T01:00:00 Z"            false]
+   [" 2019-01-20T01:00:00Z"            false]
+   ["2019-01-20T01:00:00Z "            false]
+   ["2019-1-2T01:00:00Z"               false]
+   ["19-01-20T01:00:00Z"               false]
+   ["2019-01-20T1:00:00Z"              false]
+   ["10000-01-01T00:00:00Z"            false]
+   ["2019-01-20T00:00:00.Z"            false]
+   ["2019-02-29T00:00:00Z"             false]
+   ["1900-02-29T00:00:00Z"             false]
+   ["2019-04-31T00:00:00Z"             false]
+   ["2019-00-10T00:00:00Z"             false]
+   ["2019-01-00T00:00:00Z"             false]
+   ["2019-13-45T01:00:00Z"             false]
+   ["2019-01-20T24:00:00Z"             false]
+   ["2019-01-20T25:00:00Z"             false]
+   ["2019-01-20T23:59:60Z"             false]
+   ["T01:00:00Z"                       false]
+   ["now"                              false]
+   [""                                 false]])
+
+(deftest datetime-matches-concerto-5
+  (let [reg    (fx/registry "promissory-note")
+        schema (cm/->schema reg fx/note-fqn :concerto-version 5)
+        sample (inst/json->edn (fx/sample "promissory-note"))]
+    (doseq [[value concerto-says] datetime-envelope-5]
+      (testing (str (pr-str value) " -- concerto 5 says "
+                    (if concerto-says "valid" "invalid"))
+        (is (= concerto-says (m/validate schema (assoc sample :date value))))))
+
+    (testing "and the default is still the 3.x/4.x envelope"
+      (is (m/validate (cm/->schema reg fx/note-fqn) (assoc sample :date "2019")))
+      (is (not (m/validate schema (assoc sample :date "2019")))))
+
+    (testing "3 and 4 are the same loose envelope"
+      (doseq [v [3 4]]
+        (is (m/validate (cm/->schema reg fx/note-fqn :concerto-version v)
+                        (assoc sample :date "2019-01-20")))))))
+
+(deftest concerto-version-is-checked
+  (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                        #"Unsupported :concerto-version 6"
+                        (cm/->schema maps-reg "m@1.0.0.S2I" :concerto-version 6))))
+
+(deftest concerto-5-enforces-a-scalar-on-map-keys
+  (let [ok? (fn [version k]
+              (m/validate (cm/->schema maps-reg "m@1.0.0.C2S" :concerto-version version)
+                          {k "s"}))]
+    (testing "3.x/4.x: the key is a string and nothing more"
+      (is (ok? 4 :US))
+      (is (ok? 4 :USA)))
+    (testing "5.x: Code's regex applies to the key, as it does to a value"
+      (is (ok? 5 :US))
+      (is (ok? 5 "US"))
+      (is (not (ok? 5 :USA))))))
+
+(deftest concerto-5-still-reads-datetime-keys-loosely
+  (testing "5.2.1 holds a DateTime value to the strict envelope but a DateTime
+           key to the old one"
+    (doseq [version [4 5]]
+      (let [schema (cm/->schema maps-reg "m@1.0.0.D2S" :concerto-version version)]
+        (is (m/validate schema {(keyword "2019") "s"}))
+        (is (m/validate schema {(keyword "2020-13-45") "s"}))
+        (is (m/validate schema {(keyword "2020-01-01T00:00:00Z") "s"}))
+        (is (not (m/validate schema {:hello "s"})))
+        (is (not (m/validate schema {(keyword "2020-01-01T25:00:00Z") "s"})))))))
+
+(deftest relationship-map-values
+  (testing "the parser reads `--> Type` as a relationship, as the CLI does"
+    (let [d (->> (:declarations (p/parse-string maps-cto))
+                 (filter #(= "S2Rel" (:name %))) first)]
+      (is (= (mmc "RelationshipMapValueType") (:$class (:value d))))
+      (is (= "Thing" (get-in d [:value :type :name])))))
+
+  (testing "a value is the referenced identifier, a string"
+    (doseq [version [4 5]
+            :let [ok? (fn [v] (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel"
+                                                       :concerto-version version)
+                                          {:x v}))]]
+      (is (ok? "resource:m@1.0.0.Thing#1"))
+      (is (ok? "1"))
+      (is (not (ok? 5)))
+      (is (not (ok? {:$class "m@1.0.0.Thing" :id "1"}))))))
+
+(deftest a-concerto-5-schema-exports-as-edn
+  (let [form (cm/->edn maps-reg "m@1.0.0.H" :concerto-version 5)]
+    (is (= form (edn/read-string (pr-str form))))
+    (is (str/includes? (pr-str form) ":concerto/string-key"))
+    (testing "and reads back with the same verdicts"
+      (let [revived (m/schema (edn/read-string (pr-str form)) {:registry cm/registry*})]
+        (is (m/validate revived {:$class "m@1.0.0.H" :c {:US "s"}}))
+        (is (not (m/validate revived {:$class "m@1.0.0.H" :c {:USA "s"}})))))))

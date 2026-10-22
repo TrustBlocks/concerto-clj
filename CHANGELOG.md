@@ -6,15 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The CTO parser spelled every map key and value type `Object*Type`; it now
+  emits `StringMapKeyType`, `IntegerMapValueType` and the rest, as the CLI does.
+
 ### Added
 
 - `MapDeclaration` compiles to `:map-of`, inlined where used. Keys may be
   String, DateTime, or a scalar of either; values may be any primitive, enum,
-  scalar, concept, asset or another map. Differences from `concerto validate`
-  4.x, all on its side: it accepts any value for an `Integer` map value and does
-  not check a scalar's constraints on keys, so this library holds keys to the
-  primitive (matching it) but values to the declared type; it rejects every
-  enum-valued map entry, which is not reproduced.
+  scalar, concept, asset, relationship (`--> Asset`) or another map. The CTO
+  grammar now parses `--> Type` as a map value.
+- `:concerto-version` (3, 4 or 5; default 4) on `->schema` and `->edn`, for the
+  places Concerto 5 is stricter: DateTime values must be a real
+  `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`, and a scalar's constraints
+  apply to map keys. Checked against `concerto validate` with concerto-core 3.16.7, 4.2.0 and 5.2.1.
+- Registry schemas `:concerto/string-key`, `:concerto/map-key`,
+  `:concerto/date-time-key` and `:concerto/date-time-strict`.
+  Schemas that use them read back given `registry*`.
 - `com.trustblocks.concerto.metamodel` — Concerto metamodel JSON/EDN to a
   declaration registry. Type references are resolved eagerly by filling in the
   `namespace` slot that `TypeIdentifier` already carries, so the registry is

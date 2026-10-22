@@ -14,6 +14,7 @@
   function that kebab-cases and rewrites `$class` to `:concerto/class`. Keeping
   that out of here is the whole point of the split."
   (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [com.trustblocks.concerto.metamodel :as mm]
             [malli.core :as m]
             [malli.util :as mu]))
@@ -95,14 +96,58 @@
   apply to it. A string is accepted too, for an instance built by hand."
   [:or :string :keyword])
 
+(def string-key
+  "`[:concerto/string-key child]`: a keyword or string whose text satisfies
+  `child`. A map's keys are strings in Concerto but keywords once
+  `instance/json->edn` has walked an instance, and a regex or date-time schema
+  only accepts strings.
+
+  A registered schema type rather than an inline `:fn`, so a dumped schema is
+  still pure EDN and reads back given `registry*`."
+  (m/-simple-schema
+   {:type    :concerto/string-key
+    :min     1
+    :max     1
+    :compile (fn [_ [child] options]
+               (let [valid? (m/validator child options)]
+                 {:pred (fn [k]
+                          (and (or (string? k) (keyword? k))
+                               (valid? (if (keyword? k) (subs (str k) 1) k))))}))}))
+
 (def date-time-key
-  "A DateTime-keyed map's key: the same wire form as `date-time`, read off a
-  keyword or a string. Named, like `double-like`, so a dumped schema stays
-  readable and pure EDN."
-  [:fn {:error/message "should be a date-time"}
-   (fn [k]
-     (let [s (if (keyword? k) (subs (str k) 1) k)]
-       (and (string? s) (boolean (re-find date-time-pattern s)))))])
+  "A DateTime map key. Unlike a DateTime value, Concerto 5 still checks a key
+  with the older, looser parser -- `2019` and `2020-13-45` are accepted as keys
+  by 5.2.1, as by 3.x -- so `->schema`'s strict swap leaves this one alone."
+  date-time)
+
+(def date-time-strict-pattern
+  "Concerto 5's DateTime envelope: `YYYY-MM-DDTHH:mm:ss[.f+]` and a `Z` or
+  `+/-HH:MM` offset, nothing else. Month, day, hour, minute and second are
+  range-checked here; whether the day exists in that month is not something a
+  regular expression can say, and is `real-date?`'s job.
+
+  Every shape 3.x accepted and 5.x does not -- a bare year, `20190120`, no
+  offset, no seconds, a space for the `T`, a leading `+` -- is covered by the
+  test table."
+  #"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$")
+
+(defn- real-date?
+  "Whether the `YYYY-MM-DD` at the front of `s` is a Gregorian date that exists.
+  Concerto 5 rejects `2019-02-29` and `2019-04-31`; 3.x accepted both."
+  [s]
+  (let [n     #(#?(:clj Long/parseLong :cljs js/parseInt) (subs s %1 %2) 10)
+        y     (n 0 4)
+        mo    (n 5 7)
+        d     (n 8 10)
+        leap? (and (zero? (mod y 4)) (or (pos? (mod y 100)) (zero? (mod y 400))))]
+    (<= d ([31 (if leap? 29 28) 31 30 31 30 31 31 30 31 30 31] (dec mo)))))
+
+(def date-time-strict
+  "Concerto 5 DateTime. Selected by `->schema`'s `:concerto-version 5`; the
+  looser `date-time` stays the default because it is what 3.x and 4.x enforce."
+  [:and :string
+   [:re {:error/message "should be a date-time"} date-time-strict-pattern]
+   [:fn {:error/message "should be a date that exists"} real-date?]])
 
 (def registry*
   "Malli registry: the defaults, malli.util's :merge/:select-keys, and the
@@ -113,7 +158,9 @@
          {:concerto/date-time     date-time
           :concerto/double        double-like
           :concerto/map-key       map-key
-          :concerto/date-time-key date-time-key}))
+          :concerto/string-key    string-key
+          :concerto/date-time-key date-time-key
+          :concerto/date-time-strict date-time-strict}))
 
 ;; ---------------------------------------------------------------- the model
 
@@ -294,6 +341,11 @@
 
 (declare object-schema)
 
+(def ^:private ^:dynamic *strict*
+  "True while compiling for Concerto 5, whose validator enforces a scalar's own
+  constraints on map keys. Bound by `->schema`."
+  false)
+
 (def ^:private ^:dynamic *maps-in-progress*
   "Map declarations being compiled, outermost first. A map is inlined where it
   is used rather than referenced, so one whose value type leads back to itself
@@ -303,29 +355,35 @@
 (defn- map-key-schema
   "Schema for a map's keys.
 
-  Concerto allows String, DateTime, or a scalar over either. It checks the first
-  two and *not* a scalar's constraints -- `concerto validate` accepts `USA` as a
-  key of a map keyed by `scalar Code extends String regex=/^[A-Z]{2}$/` -- so a
-  scalar key is held to its underlying primitive, matching the validator this
-  library is checked against and not the stricter reading of the declaration."
+  Concerto allows String, DateTime, or a scalar over either. What it checks of a
+  scalar key depends on the version: 3.x and 4.x hold the key to the underlying
+  primitive only -- `concerto validate` accepts `USA` as a key of a map keyed by
+  `scalar Code extends String regex=/^[A-Z]{2}$/` -- while 5.x enforces the
+  scalar's constraints as well. `*strict*` selects between them."
   [reg fqn {:keys [$class type]}]
   (case (mm/metamodel-type $class)
     "StringMapKeyType"   :concerto/map-key
-    "DateTimeMapKeyType" :concerto/date-time-key
+    "DateTimeMapKeyType" [:concerto/string-key :concerto/date-time-key]
     "ObjectMapKeyType"
     (let [t (mm/type-fqn type)]
       (when-not (declaration-of reg t)
         (throw (ex-info (str "Unresolved type " (pr-str t) " as the key of map "
                              (pr-str fqn) ". Its model is not loaded.")
                         {:map fqn :type t})))
-      (case (scalar-declarations (declaration-kind reg t))
-        :string             :concerto/map-key
-        :concerto/date-time :concerto/date-time-key
-        (throw (ex-info (str "Map " (pr-str fqn) " is keyed by " (pr-str t)
-                             ", which is not a String or DateTime scalar. "
-                             "Concerto allows only String, DateTime and scalars "
-                             "of them as map keys.")
-                        {:map fqn :type t}))))
+      (let [kind (declaration-kind reg t)
+            base (scalar-declarations kind)]
+        (when-not (#{:string :concerto/date-time} base)
+          (throw (ex-info (str "Map " (pr-str fqn) " is keyed by " (pr-str t)
+                               ", which is not a String or DateTime scalar. "
+                               "Concerto allows only String, DateTime and scalars "
+                               "of them as map keys.")
+                          {:map fqn :type t})))
+        (cond
+          *strict*  [:concerto/string-key
+                     (constrained (if (= :string base) base :concerto/date-time-key)
+                                  (declaration-of reg t))]
+          (= :string base) :concerto/map-key
+          :else            [:concerto/string-key :concerto/date-time-key])))
     (throw (ex-info (str "Cannot compile the key of map " (pr-str fqn) ": "
                          (pr-str $class) " is not a map key type this library "
                          "handles. Refusing to emit a schema that would accept "
@@ -334,8 +392,12 @@
 
 (defn- map-value-schema [reg subtypes fqn key-fn {:keys [$class type]}]
   (let [kind (mm/metamodel-type $class)]
-    (if (= "ObjectMapValueType" kind)
-      (object-schema reg subtypes (mm/type-fqn type) key-fn)
+    (case kind
+      "ObjectMapValueType" (object-schema reg subtypes (mm/type-fqn type) key-fn)
+      ;; As a RelationshipProperty: the referenced identifier. Concerto 5 loads
+      ;; these (3.x refuses the model), and both a bare id and a
+      ;; `resource:` URI are strings.
+      "RelationshipMapValueType" :string
       (or (scalar (str/replace kind #"MapValueType$" "Property"))
           (throw (ex-info (str "Cannot compile the value of map " (pr-str fqn) ": "
                                (pr-str $class) " is not a map value type this "
@@ -568,36 +630,50 @@
   would reject a legitimate subclass.
 
   A model with nothing nested emits as a plain map, since there is nothing to
-  reference."
-  [reg fqn & {:keys [key-fn closed] :or {key-fn keyword closed true}}]
+  reference.
+
+  `:concerto-version` is the major version of the validator to agree with: 3, 4
+  (the default) or 5. They differ where 5 is stricter -- DateTime must be a real
+  `YYYY-MM-DDTHH:mm:ss[.f]Z|+HH:MM`, where 3.x and 4.x accept a bare year or a
+  date alone -- and where a scalar's constraints apply to a map key."
+  [reg fqn & {:keys [key-fn closed concerto-version]
+              :or   {key-fn keyword closed true concerto-version 4}}]
+  (when-not (#{3 4 5} concerto-version)
+    (throw (ex-info (str "Unsupported :concerto-version " (pr-str concerto-version)
+                         ". This library has been checked against 3, 4 and 5.")
+                    {:concerto-version concerto-version :supported [3 4 5]})))
   (when (empty? (mm/super-chain reg fqn))
     (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
-  (let [subtypes (subtype-index reg)
-        needed   (referenced reg subtypes fqn)
-        root     (object-schema reg subtypes fqn key-fn)
-        form     (cond
-                   ;; An enum or scalar root is a value, not a tagged object,
-                   ;; so object-schema has already produced the whole thing.
-                   (empty? needed) root
+  (binding [*strict* (= 5 concerto-version)]
+   (let [subtypes (subtype-index reg)
+         needed   (referenced reg subtypes fqn)
+         root     (object-schema reg subtypes fqn key-fn)
+         form     (cond
+                    ;; An enum or scalar root is a value, not a tagged object,
+                    ;; so object-schema has already produced the whole thing.
+                    (empty? needed) root
 
-                   ;; Nothing to reference: emit the map itself, so a simple
-                   ;; model stays readable as a simple schema.
-                   (and (= [:ref fqn] root) (not (references? reg fqn)))
-                   (declaration->map reg subtypes fqn key-fn closed)
+                    ;; Nothing to reference: emit the map itself, so a simple
+                    ;; model stays readable as a simple schema.
+                    (and (= [:ref fqn] root) (not (references? reg fqn)))
+                    (declaration->map reg subtypes fqn key-fn closed)
 
-                   :else
-                   [:schema
-                    ;; A plain map, not a sorted one: malli consults this
-                    ;; registry for keyword types too (:concerto/date-time and
-                    ;; friends), and a string-keyed sorted map throws comparing
-                    ;; those. Built from sorted names so the emitted form is
-                    ;; reproducible.
-                    {:registry (into {}
-                                     (map (fn [f]
-                                            [f (declaration->map reg subtypes f key-fn closed)]))
-                                     (sort needed))}
-                    root])]
-    (m/schema form {:registry registry*})))
+                    :else
+                    [:schema
+                     ;; A plain map, not a sorted one: malli consults this
+                     ;; registry for keyword types too (:concerto/date-time and
+                     ;; friends), and a string-keyed sorted map throws comparing
+                     ;; those. Built from sorted names so the emitted form is
+                     ;; reproducible.
+                     {:registry (into {}
+                                      (map (fn [f]
+                                             [f (declaration->map reg subtypes f key-fn closed)]))
+                                      (sort needed))}
+                     root])]
+     (m/schema (if *strict*
+                 (walk/postwalk-replace {:concerto/date-time :concerto/date-time-strict} form)
+                 form)
+               {:registry registry*}))))
 
 (defn ->edn
   "The schema as plain EDN, ready to spit to a file.

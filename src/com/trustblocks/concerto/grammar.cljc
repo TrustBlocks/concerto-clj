@@ -69,7 +69,10 @@ scalar-default = <'default'> <'='> literal
    than a compiler that says it cannot handle one. *)
 map-decl  = decorator* <'map'> ident <'{'> map-key map-value <'}'>
 map-key   = <'o'> ident
-map-value = <'o'> ident
+(* A value may be a relationship (`--> Asset`), which a key never is. `rel` is
+   kept as an empty node so the transform can tell the two apart. *)
+map-value = <'o'> ident | rel ident
+rel       = <'-->'>
 
 (* ------------------------------------------------------------- properties *)
 
