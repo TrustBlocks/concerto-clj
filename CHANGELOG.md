@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `:concerto-version 5` was the strict mode, and it should not have been: 5.0 and
+  5.1 behave like 4.x, and the strictness (DateTime, scalar map keys, typed map
+  values) arrived in 5.2.0. `5` now means 5.0; the strict mode is `"5.2"`. A
+  `--> Asset` map value is also now version-dependent, where it was always a
+  string: the embedded resource in 4.x, 5.0 and 5.1, the reference from 5.2.
 - A nested concept, array element or map value may omit its `$class`; Concerto
   reads it as the declared type. Schemas required it everywhere, rejecting valid
   data. The root still requires it, as does an abstract declared type.
@@ -44,10 +49,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   String, DateTime, or a scalar of either; values may be any primitive, enum,
   scalar, concept, asset, relationship (`--> Asset`) or another map. The CTO
   grammar now parses `--> Type` as a map value.
-- `:concerto-version` (3, 4 or 5; default 4) on `->schema` and `->edn`, for the
-  places Concerto 5 is stricter: DateTime values must be a real
-  `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`, and a scalar's constraints
-  apply to map keys. Checked against `concerto validate` with concerto-core 3.16.7, 4.2.0 and 5.2.1.
+- `:concerto-version` (default 4) on `->schema` and `->edn`: a major version (3,
+  4, 5 -- an integer is that major's first release, so 5 is 5.0) or a string such
+  as `"5.2"`. The strictness is not where the major version is: DateTime must be
+  a real `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`, and a scalar's
+  constraints apply to a map key, **from 5.2.0** -- 5.0 and 5.1 behave like 4.x.
+  A `--> Asset` map value is the embedded resource in 4.x, 5.0 and 5.1, the
+  referenced identifier from 5.2, and unloadable in 3.x. Each was run against
+  concerto-core 3.16.7, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1.
 - Registry schemas `:concerto/string-key`, `:concerto/map-key`,
   `:concerto/date-time-key` and `:concerto/date-time-strict`.
   Schemas that use them read back given `registry*`.

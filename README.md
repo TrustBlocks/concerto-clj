@@ -108,27 +108,36 @@ the guarantee this library offers is the one Concerto offers.
 
 ### Which Concerto
 
-The validator this library agrees with is not one fixed thing: Concerto 5 is
-stricter than 3.x and 4.x, and the schemas it produces differ accordingly.
-Choose with `:concerto-version` (3, 4 or 5; the default is 4, and 3 and 4 behave
-the same):
+The validator this library agrees with is not one fixed thing, and the break is
+not where the major version is: **5.0 and 5.1 behave like 4.x; the strictness
+arrived in 5.2.0.** Choose with `:concerto-version`: a major version (`3`, `4`,
+`5`, where an integer means that major's first release, so `5` is 5.0) or a
+string that names the minor. The default is `4`.
 
 ```clojure
-(cm/->schema reg fqn)                       ; 3.x / 4.x
-(cm/->schema reg fqn :concerto-version 5)   ; 5.x
+(cm/->schema reg fqn)                           ; 3.x / 4.x, the default
+(cm/->schema reg fqn :concerto-version 5)       ; 5.0 and 5.1 -- the same as 4
+(cm/->schema reg fqn :concerto-version "5.2")   ; 5.2.0 and later
 ```
 
-| | 3.x / 4.x | 5.x |
-|---|---|---|
-| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
-| scalar's constraints on a map key | not checked | checked |
-| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | checked |
-| DateTime map key | loose | loose, unchanged |
+| | 3.x | 4.x, 5.0, 5.1 | 5.2 and later |
+|---|---|---|---|
+| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | same | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
+| scalar's constraints on a map key | not checked | not checked | checked |
+| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | same | checked |
+| DateTime map key | loose | loose | loose, unchanged |
+| `--> Asset` map value | model refused | the embedded resource, `$class` and all; a `resource:` string is rejected | the referenced identifier, a string; an embedded resource is rejected |
 
-Each cell was observed by running `concerto validate` with concerto-core 3.16.7,
-4.2.0 and 5.2.1 (3.16.7 and 4.2.0 agree on every case), and the test suite
-carries the DateTime tables for both behaviors. Metamodel JSON is identical
-across the two, so the parser, fixtures and registry do not depend on the choice.
+Each cell was observed by running Concerto, not read from release notes: 3.16.7
+through `concerto validate`, and 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1 through
+concerto-core's `Serializer`. The boundary is exact: 5.1.0 matches 5.0.0, and
+5.2.0 matches 5.2.1. The test suite carries the DateTime tables for both
+behaviors. Metamodel JSON is identical across all of them, so the parser,
+fixtures and registry do not depend on the choice.
+
+(Concerto's maintainers are also building a Rust engine for a future 6.0 that
+deliberately returns to the 5.0 behavior for `--> Asset` map values, so that
+cell may move again.)
 
 A property whose declared type has several concrete subtypes compiles to a
 `:multi` dispatching on `$class`, because Concerto permits polymorphism and a
@@ -428,7 +437,7 @@ the property rather than compiling to something that accepts any value.
 [concerto-conformance](https://github.com/accordproject/concerto-conformance),
 vendored as written; `conformance_validate_test.cljc` reads its `.feature` files
 and runs every scenario (42, with the `Scenario Outline` examples expanded) at
-`:concerto-version` 4 and 5. All pass. One passes by declining to compile a schema
+`:concerto-version` 4, 5 and "5.2". All pass. One passes by declining to compile a schema
 for a `$class` the model does not declare, which is a refusal and not a verdict.
 
 The suite's other half, `semantic/` (116 scenarios, outlines expanded), tests

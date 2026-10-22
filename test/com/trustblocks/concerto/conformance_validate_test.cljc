@@ -7,8 +7,8 @@
   `$class`, validate. Refreshing test-resources/conformance-validate/ from
   upstream therefore refreshes the tests. See the README there for the commit.
 
-  Each scenario is run at :concerto-version 4 and 5. None of them separates the
-  two, which is itself worth knowing: the suite does not exercise DateTime
+  Each scenario is run at :concerto-version 4, 5 (that is, 5.0) and 5.2. None of them
+  separates the three, which is itself worth knowing: the suite does not exercise DateTime
   strictness or scalar map keys."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -67,7 +67,7 @@
     (is (every? :expect scenarios))))
 
 (deftest validate-suite
-  (doseq [version [4 5]
+  (doseq [version [4 5 "5.2"]
           sc      scenarios]
     (testing (str "concerto " version ": " (:name sc))
       (let [got (verdict sc version)]

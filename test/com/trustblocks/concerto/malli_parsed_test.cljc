@@ -27,7 +27,7 @@
 (def ^:private maps-cto
   "Every expectation below was run through `concerto validate` (concerto-core
   4.2.0, with ENABLE_MAP_TYPE=true) before being written down, except where a
-  test says it deliberately differs. The `:concerto-version 5` tests were run
+  test says it deliberately differs. The `:concerto-version \"5.2\"` tests were run
   against 5.2.1."
   (str "namespace m@1.0.0\n"
        "scalar Code extends String regex=/^[A-Z]{2}$/\n"
@@ -130,26 +130,38 @@
                         (cm/->schema maps-reg "m@1.0.0.Cyc"))))
 
 (deftest concerto-version-is-checked
-  (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
-                        #"Unsupported :concerto-version 6"
-                        (cm/->schema maps-reg "m@1.0.0.S2I" :concerto-version 6))))
+  (doseq [bad [6 2 "6.0" "five" "5.x" 5.2 nil]]
+    (when (some? bad)
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                            #"Unsupported :concerto-version"
+                            (cm/->schema maps-reg "m@1.0.0.S2I" :concerto-version bad))
+          (pr-str bad))))
+  (testing "an integer is that major's first release, so 5 is 5.0"
+    (is (= (cm/->edn maps-reg "m@1.0.0.H" :concerto-version 5)
+           (cm/->edn maps-reg "m@1.0.0.H" :concerto-version "5.0")
+           (cm/->edn maps-reg "m@1.0.0.H" :concerto-version "5.1.3")))
+    (is (not= (cm/->edn maps-reg "m@1.0.0.H" :concerto-version 5)
+              (cm/->edn maps-reg "m@1.0.0.H" :concerto-version "5.2")))))
 
-(deftest concerto-5-enforces-a-scalar-on-map-keys
+(deftest concerto-5-2-enforces-a-scalar-on-map-keys
   (let [ok? (fn [version k]
               (m/validate (cm/->schema maps-reg "m@1.0.0.C2S" :concerto-version version)
                           {k "s"}))]
-    (testing "3.x/4.x: the key is a string and nothing more"
-      (is (ok? 4 :US))
-      (is (ok? 4 :USA)))
-    (testing "5.x: Code's regex applies to the key, as it does to a value"
-      (is (ok? 5 :US))
-      (is (ok? 5 "US"))
-      (is (not (ok? 5 :USA))))))
+    (testing "before 5.2 -- 5.0 and 5.1 included -- the key is a string and
+             nothing more"
+      (doseq [v [3 4 5 "5.1"]]
+        (is (ok? v :US))
+        (is (ok? v :USA) (str "at " (pr-str v)))))
+    (testing "from 5.2: Code's regex applies to the key, as it does to a value"
+      (is (ok? "5.2" :US))
+      (is (ok? "5.2" "US"))
+      (is (not (ok? "5.2" :USA)))
+      (is (not (ok? "5.2.1" :USA))))))
 
-(deftest concerto-5-still-reads-datetime-keys-loosely
+(deftest datetime-keys-are-read-loosely-in-every-version
   (testing "5.2.1 holds a DateTime value to the strict envelope but a DateTime
            key to the old one"
-    (doseq [version [4 5]]
+    (doseq [version [4 5 "5.2"]]
       (let [schema (cm/->schema maps-reg "m@1.0.0.D2S" :concerto-version version)]
         (is (m/validate schema {(keyword "2019") "s"}))
         (is (m/validate schema {(keyword "2020-13-45") "s"}))
@@ -164,18 +176,29 @@
       (is (= (mmc "RelationshipMapValueType") (:$class (:value d))))
       (is (= "Thing" (get-in d [:value :type :name])))))
 
-  (testing "a value is the referenced identifier, a string"
-    (doseq [version [4 5]
-            :let [ok? (fn [v] (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel"
-                                                       :concerto-version version)
-                                          {:x v}))]]
-      (is (ok? "resource:m@1.0.0.Thing#1"))
-      (is (ok? "1"))
-      (is (not (ok? 5)))
-      (is (not (ok? {:$class "m@1.0.0.Thing" :id "1"}))))))
+  (let [ok? (fn [version v]
+              (m/validate (cm/->schema maps-reg "m@1.0.0.S2Rel" :concerto-version version)
+                          {:x v}))
+        embedded {:$class "m@1.0.0.Thing" :id "1"}]
+    (testing "4.x, 5.0 and 5.1 want the embedded resource and refuse a reference"
+      (doseq [v [4 5 "5.1"]]
+        (is (ok? v embedded) (str "at " (pr-str v)))
+        (is (not (ok? v "resource:m@1.0.0.Thing#1")))
+        (is (not (ok? v "1")))
+        (is (not (ok? v {:$class "m@1.0.0.Thing"})) "and it is still checked")))
+    (testing "from 5.2 the value is the reference, and an embedded one is refused"
+      (doseq [v ["5.2" "5.2.1"]]
+        (is (ok? v "resource:m@1.0.0.Thing#1"))
+        (is (ok? v "1"))
+        (is (not (ok? v 5)))
+        (is (not (ok? v embedded)))))
+    (testing "3.x cannot load such a model, so there is nothing to agree with"
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                            #"Concerto 3.x cannot load"
+                            (cm/->schema maps-reg "m@1.0.0.S2Rel" :concerto-version 3))))))
 
-(deftest a-concerto-5-schema-exports-as-edn
-  (let [form (cm/->edn maps-reg "m@1.0.0.H" :concerto-version 5)]
+(deftest a-concerto-5-2-schema-exports-as-edn
+  (let [form (cm/->edn maps-reg "m@1.0.0.H" :concerto-version "5.2")]
     (is (= form (edn/read-string (pr-str form))))
     (is (str/includes? (pr-str form) ":concerto/string-key"))
     (testing "and reads back with the same verdicts"

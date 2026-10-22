@@ -658,20 +658,23 @@
    ["now"                              false]
    [""                                 false]])
 
-(deftest datetime-matches-concerto-5
+(deftest datetime-matches-concerto-5-2
   (let [reg    (fx/registry "promissory-note")
-        schema (cm/->schema reg fx/note-fqn :concerto-version 5)
-        sample (inst/json->edn (fx/sample "promissory-note"))]
+        sample (inst/json->edn (fx/sample "promissory-note"))
+        at     #(cm/->schema reg fx/note-fqn :concerto-version %)]
     (doseq [[value concerto-says] datetime-envelope-5]
-      (testing (str (pr-str value) " -- concerto 5 says "
+      (testing (str (pr-str value) " -- concerto 5.2 says "
                     (if concerto-says "valid" "invalid"))
-        (is (= concerto-says (m/validate schema (assoc sample :date value))))))
+        (is (= concerto-says (m/validate (at "5.2") (assoc sample :date value))))))
 
-    (testing "and the default is still the 3.x/4.x envelope"
-      (is (m/validate (cm/->schema reg fx/note-fqn) (assoc sample :date "2019")))
-      (is (not (m/validate schema (assoc sample :date "2019")))))
-
-    (testing "3 and 4 are the same loose envelope"
-      (doseq [v [3 4]]
-        (is (m/validate (cm/->schema reg fx/note-fqn :concerto-version v)
-                        (assoc sample :date "2019-01-20")))))))
+    (testing "strictness arrived in 5.2.0, not with 5: every earlier version, 5.0
+             and 5.1 included, takes the loose envelope. Each was run against
+             concerto-core 3.16.7, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1."
+      (doseq [v [nil 3 4 5 "5.0" "5.1" "4.2"]]
+        (is (m/validate (if v (at v) (cm/->schema reg fx/note-fqn))
+                        (assoc sample :date "2019"))
+            (str "loose at " (pr-str v)))
+        (is (m/validate (if v (at v) (cm/->schema reg fx/note-fqn))
+                        (assoc sample :date "2019-01-20"))))
+      (doseq [v ["5.2" "5.2.1" "5.9"]]
+        (is (not (m/validate (at v) (assoc sample :date "2019"))) (str "strict at " v))))))
