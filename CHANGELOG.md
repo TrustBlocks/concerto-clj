@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A default value is checked against its own field's validators (length, pattern,
+  range), on properties and scalars, with Concerto's messages: the string checks
+  skip an empty default, the number checks do not skip 0, and numbers print as
+  JavaScript prints them. The same rule from 3.26.0 to 5.2.1.
 - Decorators on the model itself are validated, as on its declarations and
   properties: under `:decoratorValidation`, one must name a declared type and fit
   its properties, and a duplicate is always an error. Concerto does the same from

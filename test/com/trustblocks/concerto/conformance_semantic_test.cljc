@@ -346,3 +346,100 @@
     (let [m (assoc (decorated-model [(decorator "Nope" "a")])
                    :imports [{:$class (str mmc "ImportType") :namespace "zzz@1.0.0" :name "Q"}])]
       (is (= :DECORATOR_001 (:rule (first-problem [m] :options validate-decorators)))))))
+
+;; ------------------------------------------- a default against its own validators
+
+(defn- field [kind nm & {:as extra}]
+  (merge {:$class (str mmc kind) :name nm :isArray false :isOptional false} extra))
+
+(defn- length-of [lo hi]
+  {:$class (str mmc "StringLengthValidator") :minLength lo :maxLength hi})
+
+(defn- regex-of [pattern & [flags]]
+  {:$class (str mmc "StringRegexValidator") :pattern pattern :flags (or flags "")})
+
+(defn- range-of [kind lo hi]
+  {:$class (str mmc kind "DomainValidator") :lower lo :upper hi})
+
+(defn- default-problem [prop]
+  (first-problem [(model "m@1.0.0" [] (concept "A" :props [prop]))]))
+
+(def ^:private default-cases
+  "[what prop expected-message]. Every message is concerto-core's, from 5.2.1;
+  nil is a model it accepts. The same rule, and the same wording, from 3.26.0."
+  [["a string under its minimum length"
+    (field "StringProperty" "s" :defaultValue "ab" :lengthValidator (length-of 3 5))
+    "The string length of 'ab' should be at least 3 characters."]
+   ["a string over its maximum"
+    (field "StringProperty" "s" :defaultValue "abcdefg" :lengthValidator (length-of 3 5))
+    "The string length of 'abcdefg' should not exceed 5 characters."]
+   ["a string within its length"
+    (field "StringProperty" "s" :defaultValue "abcd" :lengthValidator (length-of 3 5)) nil]
+   ["a string that fails its regex"
+    (field "StringProperty" "s" :defaultValue "abc" :validator (regex-of "^[0-9]+$"))
+    "Value 'abc' failed to match validation regex: /^[0-9]+$/"]
+   ["a string that matches its regex"
+    (field "StringProperty" "s" :defaultValue "123" :validator (regex-of "^[0-9]+$")) nil]
+   ["the regex's flags are honoured, and shown"
+    (field "StringProperty" "s" :defaultValue "ABC" :validator (regex-of "^abc$" "i")) nil]
+   ["  and a miss says so with them"
+    (field "StringProperty" "s" :defaultValue "xyz" :validator (regex-of "^abc$" "i"))
+    "Value 'xyz' failed to match validation regex: /^abc$/i"]
+   ["length is checked before the regex, so its message comes first"
+    (field "StringProperty" "s" :defaultValue "ab" :validator (regex-of "^[0-9]+$")
+           :lengthValidator (length-of 3 5))
+    "The string length of 'ab' should be at least 3 characters."]
+   ["an empty string, which Concerto does not check (it asks `if (defaultValue)`)"
+    (field "StringProperty" "s" :defaultValue "" :lengthValidator (length-of 3 5)) nil]
+   ["  nor against a regex"
+    (field "StringProperty" "s" :defaultValue "" :validator (regex-of "^[0-9]+$")) nil]
+   ["an integer below its lower bound"
+    (field "IntegerProperty" "n" :defaultValue 1 :validator (range-of "Integer" 5 10))
+    "Value 1 is outside lower bound 5"]
+   ["above its upper"
+    (field "IntegerProperty" "n" :defaultValue 11 :validator (range-of "Integer" 5 10))
+    "Value 11 is outside upper bound 10"]
+   ["in range"
+    (field "IntegerProperty" "n" :defaultValue 7 :validator (range-of "Integer" 5 10)) nil]
+   ["zero, which a number is checked as, unlike a string"
+    (field "IntegerProperty" "n" :defaultValue 0 :validator (range-of "Integer" 5 10))
+    "Value 0 is outside lower bound 5"]
+   ["  against a negative range"
+    (field "IntegerProperty" "n" :defaultValue 0 :validator (range-of "Integer" -5 -1))
+    "Value 0 is outside upper bound -1"]
+   ["a long above its upper bound, with no lower"
+    (field "LongProperty" "n" :defaultValue 99 :validator (range-of "Long" nil 10))
+    "Value 99 is outside upper bound 10"]
+   ["a double, printed as JavaScript prints it: 0.5, and 1 for 1.0"
+    (field "DoubleProperty" "d" :defaultValue 0.5 :validator (range-of "Double" 1.0 2.0))
+    "Value 0.5 is outside lower bound 1"]
+   ["  a whole one"
+    (field "DoubleProperty" "d" :defaultValue 1.0 :validator (range-of "Double" 2.0 3.0))
+    "Value 1 is outside lower bound 2"]
+   ["  a negative one"
+    (field "DoubleProperty" "d" :defaultValue -3.5 :validator (range-of "Double" -2.0 nil))
+    "Value -3.5 is outside lower bound -2"]
+   ["a default with no validator to refuse it"
+    (field "IntegerProperty" "n" :defaultValue 1) nil]])
+
+(deftest a-default-must-satisfy-its-own-validators
+  (doseq [[what prop expected] default-cases]
+    (testing what
+      (let [p (default-problem prop)]
+        (if expected
+          (do (is (= (str "Validator error for field `" (:name prop) "`. m@1.0.0.A." (:name prop) ": " expected)
+                     (:message p)))
+              (is (= "IllegalModelException" (:class p)))
+              (is (= "DefaultValidatorException" (:type p))))
+          (is (nil? p)))))))
+
+(deftest a-scalar-default-is-checked-too
+  (let [problem (fn [decl] (first-problem [(model "m@1.0.0" [] decl (concept "A"))]))]
+    (is (= "Validator error for field `Pct`. m@1.0.0.Pct: Value 5 is outside upper bound 1"
+           (:message (problem {:$class (str mmc "DoubleScalar") :name "Pct" :defaultValue 5.0
+                               :validator (range-of "Double" 0.0 1.0)}))))
+    (is (= "Validator error for field `S`. m@1.0.0.S: The string length of 'x' should be at least 2 characters."
+           (:message (problem {:$class (str mmc "StringScalar") :name "S" :defaultValue "x"
+                               :lengthValidator (length-of 2 4)}))))
+    (is (nil? (problem {:$class (str mmc "DoubleScalar") :name "Pct" :defaultValue 0.5
+                        :validator (range-of "Double" 0.0 1.0)})))))

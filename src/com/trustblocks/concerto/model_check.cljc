@@ -238,10 +238,64 @@
     (or (nil? lo) (nil? hi))     nil
     (> lo hi)                    order))
 
+(defn- js-number
+  "A number as JavaScript prints it in a message: `1` for 1.0, `-2` for -2.0."
+  [x]
+  #?(:clj  (if (and (number? x) (== x (Math/floor (double x))) (< (Math/abs (double x)) 1e15))
+             (str (long x))
+             (str x))
+     :cljs (str x)))
+
+(defn- default-matches?
+  "Whether `value` matches a regex validator, as `RegExp.test` does -- anywhere in
+  it -- with the flags the platforms agree on (`i`, `m`, `s`)."
+  [{:keys [pattern flags]} value]
+  (let [on (apply str (filter #{\i \m \s} flags))
+        re (try (re-pattern (if (seq on) (str "(?" on ")" pattern) pattern))
+                (catch #?(:clj Exception :cljs :default) _ nil))]
+    ;; A pattern that does not compile has been reported already, as itself.
+    (or (nil? re) (some? (re-find re value)))))
+
+(defn- default-value-problem
+  "What Concerto says of a default value that its own field's validators refuse,
+  or nil. It is found while the validators are built, so it follows the rest:
+  length (the minimum, then the maximum), then the pattern; or the range's lower
+  bound, then its upper.
+
+  A String default is checked only if it is not empty, since Concerto asks `if
+  (defaultValue)`; a number is checked whatever it is, 0 included."
+  [stringy? numeric? {:keys [defaultValue validator lengthValidator]}]
+  (let [d defaultValue]
+    (cond
+      (and stringy? (string? d) (seq d))
+      (let [{:keys [minLength maxLength]} lengthValidator]
+        (cond
+          (and (some? minLength) (< (count d) minLength))
+          (str "The string length of '" d "' should be at least " minLength " characters.")
+
+          (and (some? maxLength) (> (count d) maxLength))
+          (str "The string length of '" d "' should not exceed " maxLength " characters.")
+
+          (and validator (= "StringRegexValidator" (kind validator))
+               (not (default-matches? validator d)))
+          (str "Value '" d "' failed to match validation regex: /" (:pattern validator) "/"
+               (:flags validator))))
+
+      (and numeric? (number? d)
+           validator (#{"IntegerDomainValidator" "LongDomainValidator" "DoubleDomainValidator"}
+                      (kind validator)))
+      (let [{:keys [lower upper]} validator]
+        (cond
+          (and (some? lower) (< d lower))
+          (str "Value " (js-number d) " is outside lower bound " (js-number lower))
+
+          (and (some? upper) (> d upper))
+          (str "Value " (js-number d) " is outside upper bound " (js-number upper)))))))
+
 (defn- validators-problems
   "Problems in the validators of one property or scalar. `owner-kind` is its
   metamodel kind, which decides what its `validator` means."
-  [owner-name owner-fqn owner-kind {:keys [validator lengthValidator sizeValidator]}]
+  [owner-name owner-fqn owner-kind {:keys [validator lengthValidator sizeValidator] :as node}]
   (let [err  (fn [message type] (validator-error owner-name owner-fqn message :type type))
         stringy? (#{"StringProperty" "StringScalar"} owner-kind)
         numeric? (#{"IntegerProperty" "LongProperty" "DoubleProperty"
@@ -268,6 +322,8 @@
                       :order "Lower bound must be less than or equal to upper bound."})]
          [(assoc (err m nil) :rule (if (str/includes? m "Invalid range")
                                      :NUMBER_VALIDATOR_001 :NUMBER_VALIDATOR_002))]))
+     (when-let [m (default-value-problem stringy? numeric? node)]
+       [(assoc (err m nil) :rule :DEFAULT_VALUE_001)])
      (when sizeValidator
        (when-let [m (bounds-problem
                      (:minSize sizeValidator) (:maxSize sizeValidator)
