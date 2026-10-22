@@ -212,3 +212,14 @@
   (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
                         #"Could not parse CTO"
                         (p/parse-string "this is not a model"))))
+
+(deftest collection-size-validators
+  (let [prop (fn [src] (-> (decls (str header "concept A { " src " }")) first :properties first))]
+    (testing "both bounds, as the CLI spells it"
+      (is (= {:$class "concerto.metamodel@1.0.0.CollectionSizeValidator" :minSize 2 :maxSize 5}
+             (:sizeValidator (prop "o String[] a size=[2,5]")))))
+    (testing "either bound alone"
+      (is (= {:$class "concerto.metamodel@1.0.0.CollectionSizeValidator" :minSize 2}
+             (:sizeValidator (prop "o String[] a size=[2,]"))))
+      (is (= {:$class "concerto.metamodel@1.0.0.CollectionSizeValidator" :maxSize 5}
+             (:sizeValidator (prop "o String[] a size=[,5] optional")))))))

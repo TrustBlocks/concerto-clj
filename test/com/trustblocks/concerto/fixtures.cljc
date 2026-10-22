@@ -16,6 +16,12 @@
   #?(:clj  (slurp (io/resource path))
      :cljs (.readFileSync (js/require "fs") (str "test-resources/" path) "utf8")))
 
+(defn read-text
+  "Any file under test-resources/ as a string, by its path relative to
+  test-resources/."
+  [path]
+  (read-fixture path))
+
 (defn- parse-json [s]
   #?(:clj  (json/parse-string s)
      :cljs (js->clj (.parse js/JSON s))))

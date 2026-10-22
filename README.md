@@ -140,6 +140,12 @@ closed schema for the parent alone would reject a legitimate subclass:
  ["poly@1.0.0.Dog" [:ref "poly@1.0.0.Dog"]]]
 ```
 
+A nested value may leave out its `$class`: Concerto reads it as the declared
+type, and refuses only when that type is abstract, so registry entries mark
+`$class` optional (except for abstract types) while the root, which has nothing to
+infer it from, requires it. An unknown `$class`, or one that is not a subtype of
+the declared type, is still refused.
+
 An optional property compiles to `[:k {:optional true} [:maybe schema]]`: Concerto
 treats an explicit `null` on an optional property as absent (and `concerto
 validate` drops it), so the schema does too. A `null` on a required property is
@@ -416,6 +422,19 @@ For the same reason there is no permissive fallback for unhandled property
 kinds. A property kind this library does not understand raises an error naming
 the property rather than compiling to something that accepts any value.
 
+## Conformance
+
+`test-resources/conformance-validate/` is the `validate/` suite of
+[concerto-conformance](https://github.com/accordproject/concerto-conformance),
+vendored as written; `conformance_validate_test.cljc` reads its `.feature` files
+and runs every scenario (42, with the `Scenario Outline` examples expanded) at
+`:concerto-version` 4 and 5. All pass. One passes by declining to compile a schema
+for a `$class` the model does not declare, which is a refusal and not a verdict.
+
+The suite's other half, `semantic/`, tests Concerto refusing a malformed *model*
+at load time. This library does not load-validate models, apart from size
+validators, and does not run it.
+
 ## Status
 
 Early. Verified against all 57 templates in the Accord
@@ -428,7 +447,7 @@ concepts stopped compiling to a bare `:map`.
 
 Still narrower than Concerto's own validator:
 
-- `defaultValue` is ignored
+- `defaultValue` only makes a field omittable; the default itself is not filled in
 - enum-valued map entries are accepted, though every Concerto version checked
   (3.16.7, 4.2.0 and 5.2.1) wrongly rejects them
 

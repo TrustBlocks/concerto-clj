@@ -82,7 +82,7 @@ property = relationship | field
    declaration is decided in the transform, against the metamodel's own list.
    Splitting it in the grammar makes the choice ambiguous to a CFG parser. *)
 field    = decorator* <'o'> ident array? ident
-           default? validator? length-validator? optional?
+           default? validator? length-validator? size-validator? optional?
 relationship = decorator* <'-->'> ident array? ident optional?
 
 array    = '[]'
@@ -100,6 +100,9 @@ upper = number
 length-validator = <'length'> <'='> <'['> min-len? <','> max-len? <']'>
 min-len = number
 max-len = number
+size-validator   = <'size'> <'='> <'['> min-size? <','> max-size? <']'>
+min-size = number
+max-size = number
 
 (* --------------------------------------------------------------- lexical *)
 

@@ -7,7 +7,8 @@
 
     cto-test     JVM and babashka only -- it shells out to Accord's CLI.
 
-    parser-test  JVM and ClojureScript only. instaparse uses `deftype` with
+    parser-test, malli-parsed-test, conformance-validate-test
+                 JVM and ClojureScript only. instaparse uses `deftype` with
                  `clojure.lang.IHashEq`, which babashka's interpreter cannot
                  provide, so the Clojure CTO parser does not run there and bb
                  scripts still need the CLI."
@@ -16,7 +17,9 @@
             com.trustblocks.concerto.instance-test
             com.trustblocks.concerto.malli-test
             com.trustblocks.concerto.metamodel-test
-            #?(:cljs com.trustblocks.concerto.parser-test)))
+            #?@(:cljs [com.trustblocks.concerto.conformance-validate-test
+                       com.trustblocks.concerto.malli-parsed-test
+                       com.trustblocks.concerto.parser-test])))
 
 #?(:clj
    (def ^:private babashka?
@@ -37,7 +40,9 @@
                          'com.trustblocks.concerto.instance-test
                          'com.trustblocks.concerto.conformance-test
                          'com.trustblocks.concerto.cto-test]
-                  (not babashka?) (conj 'com.trustblocks.concerto.parser-test))]
+                  (not babashka?) (conj 'com.trustblocks.concerto.conformance-validate-test
+                                       'com.trustblocks.concerto.malli-parsed-test
+                                       'com.trustblocks.concerto.parser-test))]
        (when babashka?
          (println "  (skipping parser-test: instaparse does not run under babashka)"))
        (doseq [n nses] (require n))
@@ -49,6 +54,8 @@
                   'com.trustblocks.concerto.malli-test
                   'com.trustblocks.concerto.instance-test
                   'com.trustblocks.concerto.conformance-test
+                  'com.trustblocks.concerto.conformance-validate-test
+                  'com.trustblocks.concerto.malli-parsed-test
                   'com.trustblocks.concerto.parser-test)))
 
 #?(:cljs (-main))
