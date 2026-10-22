@@ -1,0 +1,7 @@
+namespace org.concerto.concepts.cd005.invalid@1.0.0
+
+concept Entity identified by id {
+  o Integer id 
+  o String name
+}
+

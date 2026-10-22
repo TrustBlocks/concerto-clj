@@ -1,0 +1,10 @@
+namespace org.example.relationship003.invalid@1.0.0
+
+concept Employee identified by id {
+  o String id
+  --> Department dept 
+}
+
+concept Department {
+  o String code
+}

@@ -26,8 +26,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `com.trustblocks.concerto.model-check`: Concerto's model-level validation, as
+  `check` (problems as data, with the rule id and exception class) and `check!`
+  (throws the first). Opt-in. Covers declarations, properties, inheritance,
+  identifiers, relationships, validators, maps, scalars, imports, namespaces,
+  decorator validation and metamodel validation, following concerto-core 5.2.1.
+  All 116 scenarios of concerto-conformance's `semantic/` suite are accounted for:
+  108 pass, 8 are held to 5.2.1's own behavior where it fails the suite
+  (`core-disagrees.edn`). Raises nothing on the 237 model files of the
+  cicero-template-library.
+- `script/gen_metamodel_schema.clj` and the generated `metamodel-schema`: the
+  properties each metamodel class may carry, from concerto-metamodel's CTO.
 - The `validate/` suite of concerto-conformance is vendored and run in full
   (42 scenarios, at `:concerto-version` 4 and 5).
+
 - `MapDeclaration` compiles to `:map-of`, inlined where used. Keys may be
   String, DateTime, or a scalar of either; values may be any primitive, enum,
   scalar, concept, asset, relationship (`--> Asset`) or another map. The CTO

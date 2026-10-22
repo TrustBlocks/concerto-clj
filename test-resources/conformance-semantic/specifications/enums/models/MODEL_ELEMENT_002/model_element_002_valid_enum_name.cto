@@ -1,0 +1,6 @@
+namespace org.example.enums.modelelement002.invalid@1.0.0
+
+enum Status {
+  o PENDING
+  o APPROVED
+}

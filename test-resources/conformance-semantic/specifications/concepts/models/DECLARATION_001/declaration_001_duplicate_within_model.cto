@@ -1,0 +1,7 @@
+namespace org.example.declaration001.invalid@1.0.0
+
+concept User identified by id {
+  o String id
+  o String name
+  o String name 
+}

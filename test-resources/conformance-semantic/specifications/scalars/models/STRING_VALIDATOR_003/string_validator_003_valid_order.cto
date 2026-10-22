@@ -1,0 +1,5 @@
+namespace org.concerto.scalars.valid.str003@1.0.0
+
+concept Tag {
+  o String label length=[2, 5]
+}

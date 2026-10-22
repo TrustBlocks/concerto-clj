@@ -1,0 +1,10 @@
+namespace org.concerto.maps.valid.value001@1.0.0
+
+concept ValueType {
+  o String GOOD
+}
+
+map MyMap {
+  o String
+  o ValueType
+}

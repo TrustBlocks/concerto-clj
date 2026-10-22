@@ -1,0 +1,10 @@
+namespace org.concerto.concepts.cd003.invalid@1.0.0
+
+concept SampleConceptA {
+  o String name
+}
+
+concept SampleConceptA {
+  o String description
+}
+

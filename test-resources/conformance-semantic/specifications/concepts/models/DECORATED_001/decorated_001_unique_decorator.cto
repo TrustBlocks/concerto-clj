@@ -1,0 +1,6 @@
+namespace org.example.decorated001.valid@1.0.0
+
+concept Product identified by productId {
+  @custom
+  o String productId
+}

@@ -1,0 +1,6 @@
+namespace org.concerto.maps.invalid.key001@1.0.0
+
+map ValidMap {
+  o DateTime
+  o String
+}

@@ -431,9 +431,49 @@ and runs every scenario (42, with the `Scenario Outline` examples expanded) at
 `:concerto-version` 4 and 5. All pass. One passes by declining to compile a schema
 for a `$class` the model does not declare, which is a refusal and not a verdict.
 
-The suite's other half, `semantic/`, tests Concerto refusing a malformed *model*
-at load time. This library does not load-validate models, apart from size
-validators, and does not run it.
+The suite's other half, `semantic/` (116 scenarios, outlines expanded), tests
+Concerto refusing a malformed *model* at load time. `model-check` implements
+those rules, following concerto-core 5.2.1's source:
+
+```clojure
+(require '[com.trustblocks.concerto.model-check :as mc])
+(mc/check models)    ; => [{:rule :CLASS_DECLARATION_004 :class "IllegalModelException"
+                    ;       :message "Could not find super type Nope"}]
+(mc/check! models)   ; throws the first one, or returns the models
+```
+
+It covers names and reserved names, duplicate declarations and fields, supertypes
+(missing, self-extending, cyclic, of the wrong kind, redeclared identifiers),
+identifier fields, undeclared and relationship types, validators (regex, string
+length, number range, collection size), maps (key, value, nesting), scalars,
+duplicate decorators, imports (unloaded namespaces, undeclared types, two versions
+of one namespace, aliases, wildcards, unversioned namespaces), decorator
+validation (`:decoratorValidation` options) and, with `:metamodelValidation`,
+AST properties the metamodel does not declare. It is opt-in: nothing calls it
+unless you do. It raised nothing on any of the 237 model files of the
+cicero-template-library.
+
+All 116 scenarios are accounted for: 108 satisfy the suite, and 8 are held to what
+concerto-core 5.2.1 does instead, because 5.2.1 itself fails them. They are in
+`test-resources/conformance-semantic/core-disagrees.edn`, each with its reason:
+
+- four assert wording 5.2.1 no longer uses, or a JavaScript crash message
+  ("Cannot read properties of null"),
+- three expect an error for importing a namespace twice, which 5.2.1 accepts,
+- one expects "Maximum call stack size exceeded" for a cyclic supertype chain;
+  `model-check` reports it as the model error it is.
+
+Where the suite and 5.2.1 disagree, `model-check` follows 5.2.1. A scenario that
+fails neither way goes in `known-failures.edn`, which the test requires to still
+fail; it is empty.
+
+Not covered: `:metamodelValidation` checks only for unexpected AST properties, not
+for missing required ones or wrong value types; decorators on the model itself (as
+opposed to its declarations and properties) are not validated; and a default
+value is not checked against its field's validators.
+
+The allowed AST properties come from `metamodel_schema.cljc`, generated from
+concerto-metamodel's own CTO by `script/gen_metamodel_schema.clj`.
 
 ## Status
 

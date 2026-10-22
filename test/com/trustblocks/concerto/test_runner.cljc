@@ -13,6 +13,7 @@
                  provide, so the Clojure CTO parser does not run there and bb
                  scripts still need the CLI."
   (:require [clojure.test :as t]
+            com.trustblocks.concerto.conformance-semantic-test
             com.trustblocks.concerto.conformance-test
             com.trustblocks.concerto.instance-test
             com.trustblocks.concerto.malli-test
@@ -38,6 +39,7 @@
      (let [nses (cond-> ['com.trustblocks.concerto.metamodel-test
                          'com.trustblocks.concerto.malli-test
                          'com.trustblocks.concerto.instance-test
+                         'com.trustblocks.concerto.conformance-semantic-test
                          'com.trustblocks.concerto.conformance-test
                          'com.trustblocks.concerto.cto-test]
                   (not babashka?) (conj 'com.trustblocks.concerto.conformance-validate-test
@@ -53,6 +55,7 @@
      (t/run-tests 'com.trustblocks.concerto.metamodel-test
                   'com.trustblocks.concerto.malli-test
                   'com.trustblocks.concerto.instance-test
+                  'com.trustblocks.concerto.conformance-semantic-test
                   'com.trustblocks.concerto.conformance-test
                   'com.trustblocks.concerto.conformance-validate-test
                   'com.trustblocks.concerto.malli-parsed-test

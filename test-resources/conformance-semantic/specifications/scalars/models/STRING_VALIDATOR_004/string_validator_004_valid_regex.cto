@@ -1,0 +1,5 @@
+namespace org.concerto.scalars.valid.str004@1.0.0
+
+concept Email {
+  o String email regex=/^.+@.+\..+$/
+}

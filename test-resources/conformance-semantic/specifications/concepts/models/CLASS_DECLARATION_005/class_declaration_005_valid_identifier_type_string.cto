@@ -1,0 +1,7 @@
+namespace org.concerto.concepts.cd005.valid@1.0.0
+
+concept Entity identified by id {
+  o String id
+  o String name
+}
+

@@ -17,6 +17,7 @@
             [com.trustblocks.concerto.instance :as inst]
             [com.trustblocks.concerto.malli :as cm]
             [com.trustblocks.concerto.metamodel :as mm]
+            [com.trustblocks.concerto.model-check :as mc]
             [com.trustblocks.concerto.parser :as p]
             [malli.core :as m]))
 
@@ -77,3 +78,14 @@
           :invalid (is (if (= :refused got)
                          (= "Non-existent $class type should fail" (:name sc))
                          (= :invalid got))))))))
+
+(deftest the-suites-models-are-sound
+  (testing "every model these scenarios validate against is a well-formed one, so
+           model-check finds nothing in it -- the check that its rules do not
+           reject a model Concerto accepts. (The templates of the
+           cicero-template-library, 237 model files, were checked the same way.)"
+    (doseq [model (distinct (map :model scenarios))]
+      (is (empty? (mc/check [(p/parse-string
+                              (fx/read-text (str "conformance-validate/"
+                                                 (str/replace model #"^validate/" ""))))]))
+          model))))
