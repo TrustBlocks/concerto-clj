@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `MapDeclaration` compiles to `:map-of`, inlined where used. Keys may be
+  String, DateTime, or a scalar of either; values may be any primitive, enum,
+  scalar, concept, asset or another map. Differences from `concerto validate`
+  4.x, all on its side: it accepts any value for an `Integer` map value and does
+  not check a scalar's constraints on keys, so this library holds keys to the
+  primitive (matching it) but values to the declared type; it rejects every
+  enum-valued map entry, which is not reproduced.
 - `com.trustblocks.concerto.metamodel` — Concerto metamodel JSON/EDN to a
   declaration registry. Type references are resolved eagerly by filling in the
   `namespace` slot that `TypeIdentifier` already carries, so the registry is

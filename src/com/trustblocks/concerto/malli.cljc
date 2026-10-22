@@ -13,7 +13,8 @@
   `$` as a namespace separator and lowercases camelCase, so it supplies a
   function that kebab-cases and rewrites `$class` to `:concerto/class`. Keeping
   that out of here is the whole point of the split."
-  (:require [com.trustblocks.concerto.metamodel :as mm]
+  (:require [clojure.string :as str]
+            [com.trustblocks.concerto.metamodel :as mm]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -87,14 +88,32 @@
   contradiction rather than an explanation."
   [:fn {:error/message "should be a number"} number?])
 
+(def map-key
+  "A map key, which arrives as a keyword once `instance/json->edn` has walked
+  the instance: that keywordizes every key, entry keys of a Concerto map
+  included, and a map key is data, not a property name, so `key-fn` does not
+  apply to it. A string is accepted too, for an instance built by hand."
+  [:or :string :keyword])
+
+(def date-time-key
+  "A DateTime-keyed map's key: the same wire form as `date-time`, read off a
+  keyword or a string. Named, like `double-like`, so a dumped schema stays
+  readable and pure EDN."
+  [:fn {:error/message "should be a date-time"}
+   (fn [k]
+     (let [s (if (keyword? k) (subs (str k) 1) k)]
+       (and (string? s) (boolean (re-find date-time-pattern s)))))])
+
 (def registry*
   "Malli registry: the defaults, malli.util's :merge/:select-keys, and the
   Concerto-specific named schemas. Supply this when reading an exported schema
   back, or `:concerto/date-time` will not resolve."
   (merge (m/default-schemas)
          (mu/schemas)
-         {:concerto/date-time date-time
-          :concerto/double    double-like}))
+         {:concerto/date-time     date-time
+          :concerto/double        double-like
+          :concerto/map-key       map-key
+          :concerto/date-time-key date-time-key}))
 
 ;; ---------------------------------------------------------------- the model
 
@@ -141,15 +160,15 @@
   (let [kind (declaration-kind reg fqn)]
     (when-not (or (contains? map-like-declarations kind)
                   (contains? scalar-declarations kind)
-                  (= "EnumDeclaration" kind))
+                  (contains? #{"EnumDeclaration" "MapDeclaration"} kind))
       (throw (ex-info (str "Cannot compile declaration " (pr-str fqn) " of kind "
                            (pr-str kind) ". This library handles concepts, assets, "
-                           "transactions, participants, events, enums and scalars; "
-                           "map declarations are not supported yet. Refusing to "
-                           "emit a schema rather than guess at one.")
+                           "transactions, participants, events, enums, scalars and "
+                           "maps. Refusing to emit a schema rather than guess at "
+                           "one.")
                       {:declaration fqn
                        :kind        kind
-                       :supported   (sort (into #{"EnumDeclaration"}
+                       :supported   (sort (into #{"EnumDeclaration" "MapDeclaration"}
                                                 (concat map-like-declarations
                                                         (keys scalar-declarations))))})))))
 
@@ -273,6 +292,70 @@
           {}
           (sort (keys reg))))
 
+(declare object-schema)
+
+(def ^:private ^:dynamic *maps-in-progress*
+  "Map declarations being compiled, outermost first. A map is inlined where it
+  is used rather than referenced, so one whose value type leads back to itself
+  would inline forever."
+  #{})
+
+(defn- map-key-schema
+  "Schema for a map's keys.
+
+  Concerto allows String, DateTime, or a scalar over either. It checks the first
+  two and *not* a scalar's constraints -- `concerto validate` accepts `USA` as a
+  key of a map keyed by `scalar Code extends String regex=/^[A-Z]{2}$/` -- so a
+  scalar key is held to its underlying primitive, matching the validator this
+  library is checked against and not the stricter reading of the declaration."
+  [reg fqn {:keys [$class type]}]
+  (case (mm/metamodel-type $class)
+    "StringMapKeyType"   :concerto/map-key
+    "DateTimeMapKeyType" :concerto/date-time-key
+    "ObjectMapKeyType"
+    (let [t (mm/type-fqn type)]
+      (when-not (declaration-of reg t)
+        (throw (ex-info (str "Unresolved type " (pr-str t) " as the key of map "
+                             (pr-str fqn) ". Its model is not loaded.")
+                        {:map fqn :type t})))
+      (case (scalar-declarations (declaration-kind reg t))
+        :string             :concerto/map-key
+        :concerto/date-time :concerto/date-time-key
+        (throw (ex-info (str "Map " (pr-str fqn) " is keyed by " (pr-str t)
+                             ", which is not a String or DateTime scalar. "
+                             "Concerto allows only String, DateTime and scalars "
+                             "of them as map keys.")
+                        {:map fqn :type t}))))
+    (throw (ex-info (str "Cannot compile the key of map " (pr-str fqn) ": "
+                         (pr-str $class) " is not a map key type this library "
+                         "handles. Refusing to emit a schema that would accept "
+                         "any key.")
+                    {:map fqn :$class $class}))))
+
+(defn- map-value-schema [reg subtypes fqn key-fn {:keys [$class type]}]
+  (let [kind (mm/metamodel-type $class)]
+    (if (= "ObjectMapValueType" kind)
+      (object-schema reg subtypes (mm/type-fqn type) key-fn)
+      (or (scalar (str/replace kind #"MapValueType$" "Property"))
+          (throw (ex-info (str "Cannot compile the value of map " (pr-str fqn) ": "
+                               (pr-str $class) " is not a map value type this "
+                               "library handles. Refusing to emit a schema that "
+                               "would accept any value.")
+                          {:map fqn :$class $class}))))))
+
+(defn- map-schema
+  "A map declaration as `:map-of`: an object whose entries are all of one key
+  type and one value type. Unlike a concept it carries no `$class` of its own."
+  [reg subtypes fqn key-fn]
+  (when (contains? *maps-in-progress* fqn)
+    (throw (ex-info (str "Map " (pr-str fqn) " contains itself through its value "
+                         "type, so there is no finite schema for it.")
+                    {:map fqn})))
+  (let [{:keys [key value]} (declaration-of reg fqn)]
+    (binding [*maps-in-progress* (conj *maps-in-progress* fqn)]
+      [:map-of (map-key-schema reg fqn key)
+       (map-value-schema reg subtypes fqn key-fn value)])))
+
 (defn- object-schema
   "Schema for a value declared as `fqn`: the enum, or a reference to the one
   concrete type it can be, or a dispatch over every concrete type it could be."
@@ -291,6 +374,10 @@
     (contains? scalar-declarations (declaration-kind reg fqn))
     (constrained (scalar-declarations (declaration-kind reg fqn))
                  (declaration-of reg fqn))
+
+    ;; A map is a value too: a plain JSON object with no $class, so it inlines.
+    (= "MapDeclaration" (declaration-kind reg fqn))
+    (map-schema reg subtypes fqn key-fn)
 
     :else
     (let [_        (check-compilable! reg fqn)
@@ -395,6 +482,28 @@
                 (system-properties reg fqn key-fn))
           (ordered entries))))
 
+(defn- inline-kind?
+  "Kinds that compile in place of being referenced, so need no registry entry."
+  [kind]
+  (or (contains? scalar-declarations kind)
+      (contains? #{"EnumDeclaration" "MapDeclaration"} kind)))
+
+(defn- type-targets
+  "The registry-bound declarations a value of type `t` can contain: `t` itself
+  and its concrete subtypes when it is a tagged object, nothing for an enum or
+  scalar, and -- since a map inlines -- whatever its value type contains."
+  [reg subtypes t seen]
+  (when (and t (declaration-of reg t) (not (contains? seen t)))
+    (let [kind (declaration-kind reg t)]
+      (cond
+        (= "MapDeclaration" kind)
+        (let [v (:value (declaration-of reg t))]
+          (when (= "ObjectMapValueType" (mm/metamodel-type (:$class v)))
+            (type-targets reg subtypes (mm/type-fqn (:type v)) (conj seen t))))
+
+        (inline-kind? kind) nil
+        :else               (cons t (get subtypes t))))))
+
 (defn- referenced
   "Every declaration reachable from `root` through ObjectProperty references,
   following the inheritance chain and every concrete subtype at each step.
@@ -407,30 +516,31 @@
   ;; the root has subtypes it compiles to a :multi whose branches reference
   ;; them, and a branch pointing at something absent from the local registry is
   ;; an invalid-ref at schema-build time.
-  (loop [queue (into [root] (get subtypes root)), seen #{}]
+  ;; A map root inlines, so it is its value type's declarations that are seeded.
+  (loop [queue (if (= "MapDeclaration" (some->> (declaration-of reg root) :$class mm/metamodel-type))
+                 (vec (type-targets reg subtypes root #{}))
+                 (into [root] (get subtypes root)))
+         seen #{}]
     (if (empty? queue)
       seen
       (let [fqn  (first queue)
             more (vec (rest queue))]
         (if (or (contains? seen fqn)
                 (nil? (declaration-of reg fqn))
-                (enum? reg fqn)
-                (contains? scalar-declarations (declaration-kind reg fqn)))
+                (inline-kind? (declaration-kind reg fqn)))
           (recur more seen)
           (let [targets (for [ancestor (mm/super-chain reg fqn)
                               prop     (:properties (declaration-of reg ancestor))
                               :when    (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
-                              :let     [t (mm/type-fqn (:type prop))]
-                              :when    (and t (declaration-of reg t) (not (enum? reg t))
-                                            (not (contains? scalar-declarations
-                                                            (declaration-kind reg t))))
-                              target   (cons t (get subtypes t))]
+                              target   (type-targets reg subtypes (mm/type-fqn (:type prop)) #{})]
                           target)]
             (recur (into more targets) (conj seen fqn))))))))
 
 (defn- references?
   "Whether `fqn` or any ancestor declares an ObjectProperty pointing at another
-  declaration -- as opposed to an enum, which inlines, or a scalar.
+  declaration -- as opposed to an enum, which inlines, or a scalar. A map counts
+  by what it holds: one of strings inlines, one of concepts still needs them
+  referenced.
 
   This is the test for whether a local registry is needed, and it is not the
   same as asking whether the reachable set is just `fqn`: a concept whose only
@@ -440,11 +550,7 @@
   (boolean
    (some (fn [prop]
            (and (= "ObjectProperty" (mm/metamodel-type (:$class prop)))
-                (let [t (mm/type-fqn (:type prop))]
-                  (boolean (and t (declaration-of reg t)
-                                (not (enum? reg t))
-                                (not (contains? scalar-declarations
-                                                (declaration-kind reg t))))))))
+                (seq (type-targets reg {} (mm/type-fqn (:type prop)) #{}))))
          (mapcat #(:properties (declaration-of reg %)) (mm/super-chain reg fqn)))))
 
 (defn ->schema

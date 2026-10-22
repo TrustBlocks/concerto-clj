@@ -400,7 +400,10 @@ concepts stopped compiling to a bare `:map`.
 Still narrower than Concerto's own validator:
 
 - `defaultValue` is ignored
-- `MapDeclaration` is not handled
+- `RelationshipMapValueType` is refused: the Concerto 4.x CLI used to check
+  this emits `ObjectMapValueType` for an asset value, and requires the full
+  object rather than a reference. Maps of relationships will need revisiting
+  against a newer Concerto.
 
 These are gaps in coverage, not silent ones. An unhandled declaration kind, an
 unhandled property kind, an unportable regex flag, a type whose model is not

@@ -6,6 +6,7 @@
             [com.trustblocks.concerto.instance :as inst]
             [com.trustblocks.concerto.malli :as cm]
             [com.trustblocks.concerto.metamodel :as mm]
+            [com.trustblocks.concerto.parser :as p]
             [malli.core :as m]
             [malli.error :as me]))
 
@@ -569,11 +570,119 @@
           (is (not (m/validate revived (assoc valid-v :country "UNITED STATES")))))))))
 
 (deftest unsupported-declaration-kinds-are-refused
-  (testing "map declarations are not handled, and say so rather than compiling
-           to a schema that describes nothing"
-    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
-                          #"Cannot compile declaration .* of kind \"MapDeclaration\""
-                          (cm/->schema validated "v@1.0.0.Dictionary")))))
+  (testing "a declaration kind this library does not know is named, not guessed
+           at -- the next kind Concerto introduces stops the compile"
+    (let [reg (mm/registry
+               [{:$class (mmc "Model") :namespace "q@1.0.0" :imports []
+                 :declarations [{:$class (mmc "QuantumDeclaration") :name "Q"}]}])]
+      (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                            #"Cannot compile declaration .* of kind \"QuantumDeclaration\""
+                            (cm/->schema reg "q@1.0.0.Q"))))))
+
+;; ----------------------------------------------------------------------- maps
+
+(def ^:private maps-cto
+  "Every expectation below was run through `concerto validate` (4.x, with
+  ENABLE_MAP_TYPE=true) before being written down, except where a test says it
+  deliberately differs."
+  (str "namespace m@1.0.0\n"
+       "scalar Code extends String regex=/^[A-Z]{2}$/\n"
+       "enum Colour { o RED o BLUE }\n"
+       "concept Item { o String n }\n"
+       "asset Thing identified by id { o String id }\n"
+       "map S2I { o String o Integer }\n"
+       "map D2S { o DateTime o String }\n"
+       "map C2S { o Code o String }\n"
+       "map S2Item { o String o Item }\n"
+       "map S2Col { o String o Colour }\n"
+       "map S2Thing { o String o Thing }\n"
+       "map S2B { o String o Boolean }\n"
+       "map S2Code { o String o Code }\n"
+       "map S2Nest { o String o S2I }\n"
+       "map Loop { o String o Loop }\n"
+       "concept H {\n"
+       " o S2I a optional\n o D2S d optional\n o C2S c optional\n"
+       " o S2Item i optional\n o S2Col col optional\n o S2Thing t optional\n"
+       " o S2B b optional\n o S2Code sc optional\n o S2Nest nest optional\n}\n"
+       "concept Cyc { o Loop loop }\n"
+       "concept OnlyStrings { o S2I a }\n"))
+
+(def ^:private maps-reg (mm/registry [(p/parse-string maps-cto)]))
+
+(defn- h-ok? [prop value]
+  (m/validate (cm/->schema maps-reg "m@1.0.0.H")
+              (inst/json->edn {"$class" "m@1.0.0.H" prop value})))
+
+(deftest map-declarations-compile
+  (testing "the parser spells map types the way the CLI does"
+    (let [d (fn [n] (->> (:declarations (p/parse-string maps-cto))
+                         (filter #(= n (:name %))) first))]
+      (is (= (mmc "StringMapKeyType")      (:$class (:key (d "S2I")))))
+      (is (= (mmc "IntegerMapValueType")   (:$class (:value (d "S2I")))))
+      (is (= (mmc "DateTimeMapKeyType")    (:$class (:key (d "D2S")))))
+      (is (= (mmc "ObjectMapKeyType")      (:$class (:key (d "C2S")))))
+      (is (= "Code"                        (get-in (d "C2S") [:key :type :name])))
+      (is (= (mmc "ObjectMapValueType")    (:$class (:value (d "S2Item")))))))
+
+  (testing "primitive values"
+    (is (h-ok? "a" {"x" 1}))
+    (is (h-ok? "a" {}))
+    (is (not (h-ok? "a" [1])) "an array is not a map")
+    (is (not (h-ok? "a" {"x" nil})))
+    (is (h-ok? "b" {"x" true}))
+    (is (not (h-ok? "b" {"x" "true"}))))
+
+  (testing "DateTime keys"
+    (is (h-ok? "d" {"2020-01-01T00:00:00Z" "s"}))
+    (is (not (h-ok? "d" {"hello" "s"}))))
+
+  (testing "a scalar key is held to its primitive, as in Concerto"
+    (is (h-ok? "c" {"US" "s"}))
+    (is (h-ok? "c" {"USA" "s"})))
+
+  (testing "concept values are checked, and need their $class like any nested concept"
+    (is (h-ok? "i" {"x" {"$class" "m@1.0.0.Item" "n" "a"}}))
+    (is (not (h-ok? "i" {"x" {"$class" "m@1.0.0.Item" "n" 1}})))
+    (is (not (h-ok? "i" {"x" {"$class" "m@1.0.0.Item"}}))))
+
+  (testing "asset values are objects, not relationship strings"
+    (is (h-ok? "t" {"x" {"$class" "m@1.0.0.Thing" "id" "1"}}))
+    (is (not (h-ok? "t" {"x" "resource:m@1.0.0.Thing#1"}))))
+
+  (testing "enum values are their names. Concerto 4.x rejects these, which is a
+           defect in it, not a rule this library reproduces."
+    (is (h-ok? "col" {"x" "RED"}))
+    (is (not (h-ok? "col" {"x" "GREEN"}))))
+
+  (testing "a scalar value keeps its constraints"
+    (is (h-ok? "sc" {"x" "US"}))
+    (is (not (h-ok? "sc" {"x" "USA"}))))
+
+  (testing "a map of maps"
+    (is (h-ok? "nest" {"x" {"y" 1}}))
+    (is (not (h-ok? "nest" {"x" 1})))))
+
+(deftest map-declarations-export-as-edn
+  (let [form (cm/->edn maps-reg "m@1.0.0.OnlyStrings")]
+    (is (= [:map-of :concerto/map-key :int]
+           (get (by-key (map-for form "m@1.0.0.OnlyStrings")) :a)))
+    (is (= form (edn/read-string (pr-str form))))
+    (testing "and reads back, named key schemas included"
+      (let [revived (m/schema (edn/read-string (pr-str form)) {:registry cm/registry*})]
+        (is (m/validate revived {:$class "m@1.0.0.OnlyStrings" :a {:x 1}}))
+        (is (not (m/validate revived {:$class "m@1.0.0.OnlyStrings" :a {:x "s"}})))))))
+
+(deftest a-map-can-be-the-root
+  (let [schema (cm/->schema maps-reg "m@1.0.0.S2Item")]
+    (is (m/validate schema {:x {:$class "m@1.0.0.Item" :n "a"}}))
+    (is (not (m/validate schema {:x {:$class "m@1.0.0.Item" :n 1}}))
+        "its values are checked, though Item is reached only through the map"))
+  (is (m/validate (cm/->schema maps-reg "m@1.0.0.S2I") {:x 1})))
+
+(deftest a-map-that-contains-itself-is-refused
+  (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo)
+                        #"contains itself"
+                        (cm/->schema maps-reg "m@1.0.0.Cyc"))))
 
 (deftest unportable-regex-flags-are-refused
   (testing "Concerto's regexes are JavaScript regexes. i, m and s mean the same
