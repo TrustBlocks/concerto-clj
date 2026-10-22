@@ -182,6 +182,11 @@
   Malli can generate from it. Bound by `->schema`."
   false)
 
+(def ^:private ^:dynamic *optional*
+  "Under `:generators`, how optional properties are drawn: `:random` (each is
+  present or not), `:always`, or `:never`. Bound by `->schema`."
+  :random)
+
 (def registry*
   "Malli registry: the defaults, malli.util's :merge/:select-keys, and the
   Concerto-specific named schemas. Supply this when reading an exported schema
@@ -707,17 +712,22 @@
                   (let [k (key-fn (:name prop))]
                     ;; A default makes a field omittable: Concerto fills it in.
                     (if (or (:isOptional prop) (some? (:defaultValue prop)))
-                      ;; An explicit null on an optional property means the
-                      ;; same as leaving it out -- `concerto validate` accepts
-                      ;; `"deliveredAt": null` and drops it. Only the property
-                      ;; itself: a null *inside* an array is still an error, and
-                      ;; a required property's null is a missing field.
-                      [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]]
+                      (case (when *generators* *optional*)
+                        ;; Generating, and asked to always (or never) include
+                        ;; them: as required, or not at all.
+                        :always [k (property->schema reg subtypes prop key-fn)]
+                        :never  nil
+                        ;; An explicit null on an optional property means the
+                        ;; same as leaving it out -- `concerto validate` accepts
+                        ;; `"deliveredAt": null` and drops it. Only the property
+                        ;; itself: a null *inside* an array is still an error, and
+                        ;; a required property's null is a missing field.
+                        [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]])
                       [k (cond-> (property->schema reg subtypes prop key-fn)
                            (= id-field (:name prop)) non-empty)])))]
     (into (into [:map (cond-> {} closed (assoc :closed true))]
                 (system-properties reg fqn key-fn root?))
-          (ordered entries))))
+          (ordered (remove nil? entries)))))
 
 (defn- inline-kind?
   "Kinds that compile in place of being referenced, so need no registry entry."
@@ -821,7 +831,9 @@
 
   Nothing separates 3, 4 and 5.0 otherwise: 5.0 is not the strict one.
 
-  `:generators true` annotates the schema so Malli can generate from it -- see
+  `:generators` (true, or `{:optional :always}` / `{:optional :never}` to include
+  every optional property or none; the default draws each at random) annotates
+  the schema so Malli can generate from it -- see
   the `generator` namespace, which does it for you. It changes how the schema is
   written, not what it accepts: a pattern, a length or a range is given as the
   place to look, a map key is told what to draw from, and `$class` is always
@@ -831,7 +843,10 @@
   (let [version (parse-version concerto-version)]
   (when (empty? (mm/super-chain reg fqn))
     (throw (ex-info "Unknown $class -- is its model loaded?" {:fqn fqn})))
-  (binding [*version* version, *generators* (boolean generators)]
+  (binding [*version*    version
+            *generators* (boolean generators)
+            *optional*   (let [o (when (map? generators) (:optional generators))]
+                           (if (contains? #{:always :never} o) o :random))]
    (let [subtypes (subtype-index reg)
          needed   (referenced reg subtypes fqn)
          root     (object-schema reg subtypes fqn key-fn true)

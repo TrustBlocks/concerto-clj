@@ -269,6 +269,71 @@ To validate an instance:
                                  (csk/->kebab-case-keyword nm))))
 ```
 
+## Command line
+
+```console
+$ bbin install io.github.TrustBlocks/concerto-clj --as concerto-clj
+$ concerto-clj validate --input sample.json --model model/
+valid: org.accordproject.promissorynote@0.2.0.TemplateModel (concerto-version 4)
+```
+
+Or from a checkout, `bb cli validate ...`, or on the JVM `clojure -M:cli validate ...`.
+It is `concerto-clj`, not `concerto`, so it does not hide Accord's own CLI, whose
+flags it follows where it has the command.
+
+| Command | Does | Concerto's flags it takes |
+|---|---|---|
+| `validate` | an instance against its model | `--input`, `--model`, `--offline`, `--utcOffset`\*, `--functional`\* |
+| `check` | whether models are well formed (`model-check`) | `--model` |
+| `generate` | sample instances of a type | `--model`, `--concept`, `--includeOptionalFields`, `--disableValidation`\* |
+| `schema` | a type as Malli (EDN) or JSON Schema | `--model` |
+| `parse` | models as metamodel JSON | `--model`, `--output`, `--excludeLineLocations`\* |
+
+\* Accepted so a command line written for Concerto still runs; ignored, and
+`--utcOffset` and `--functional` say so on stderr when they are set to something that matters.
+
+Concerto's other commands (`compile`, `get`, `print`, `version`, `compare`, `infer`,
+`decorate`, `extract-decorators`, `convert-dcs`, `lint`) are not here; use its CLI.
+
+A **model** is a `.cto` file, a directory of them (an Accord template's `model/`), or
+the JSON `concerto parse` writes. Where this differs from Concerto's, it says so:
+
+- **Exit status.** 0 for success, 1 for a finding (an invalid instance, a model
+  problem), 2 for a mistake in the command or the files. Concerto's `validate` exits 0
+  whatever it finds, which is no use in a script.
+- **Output.** `validate` says `valid: <class>`, or lists each problem as a JSON path
+  (`$.amount.doubleValue: should be a number`), where Concerto prints the instance back
+  or a stack trace. `--format json` and `--format edn` give the same as data.
+- **`generate`** draws each optional property at random; Concerto's leaves them out
+  unless `--includeOptionalFields`. `--optional always|never|random` says which.
+  `--input -` reads standard input, so `concerto-clj generate ... | concerto-clj validate --input - ...`
+  works.
+- **Versions.** `--concerto-version` takes `3`, `4`, `5`, or `5.2` (see
+  [Which Concerto](#which-concerto)).
+
+**Parsing under babashka.** babashka cannot run the Clojure parser (instaparse does not
+load there), so a `.cto` is parsed by Accord's CLI and the result kept in
+`~/.cache/concerto-clj/ast/` (`$CONCERTO_CLJ_CACHE` to move it), keyed by the file's
+content; `--no-cache` skips it. On the JVM a `.cto` is parsed in-process, with no Node.
+JSON models need no parser at all, so with them there is nothing to install but babashka.
+
+What that costs, for the promissory-note template (four `.cto` files), measured:
+
+| | |
+|---|---|
+| `concerto validate` (Node) | 0.56s |
+| `concerto-clj validate`, JSON models | 0.16s |
+| `concerto-clj validate`, `.cto`, cache warm | 0.16s |
+| `concerto-clj validate`, `.cto`, cold | 2.25s (four Node parses) |
+| the same on the JVM | about 1.8s |
+
+Checked against Concerto's: on all 108 sample and request instances in the
+cicero-template-library, `concerto-clj validate` and `concerto validate` give the same
+verdict, at `--concerto-version` 4 and 5.2 (`script/sample_differential/compare_cli.sh`).
+Generation under babashka cannot draw a String that has a `regex` validator
+(test.chuck is not available there); see
+[Sample instances and JSON Schema](#sample-instances-and-json-schema).
+
 ## From babashka
 
 Everything except the JVM-only bits runs under babashka.
@@ -279,7 +344,8 @@ Everything except the JVM-only bits runs under babashka.
 {:deps {io.github.TrustBlocks/concerto-clj {:git/sha "..."}}}
 ```
 
-`script/cto2edn.clj` in this repo is a worked example:
+`script/cto2edn.clj` in this repo is a worked example, older than the
+[command line](#command-line) above, which does most of what it does:
 
 ```
 bb script/cto2edn.clj MODEL [options]

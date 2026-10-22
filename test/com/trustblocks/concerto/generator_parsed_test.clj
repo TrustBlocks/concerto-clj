@@ -136,3 +136,32 @@
         (let [form (cm/->edn reg fqn :generators true)]
           (is (< 5 (hints form)))
           (is (= form (clojure.edn/read-string (pr-str form)))))))))
+
+(def ^:private optionals
+  ["whens" "items" "solo" "counts" "dated" "coded" "things" "tree" "maybe"])
+
+(deftest optional-properties-can-be-always-or-never
+  (testing "`:optional :always` includes every one, as `concerto generate
+           --includeOptionalFields` does, and what comes out still validates"
+    (let [schema (cm/->schema reg fqn)
+          xs     (g/sample reg fqn 50 :seed 4 :optional :always :json false)]
+      (is (= 50 (count xs)))
+      (is (every? #(m/validate schema %) xs))
+      (doseq [k optionals]
+        (is (every? #(contains? % (keyword k)) xs) (str k " is always there")))))
+
+  (testing "`:optional :never` leaves them all out"
+    (let [schema (cm/->schema reg fqn)
+          xs     (g/sample reg fqn 50 :seed 4 :optional :never :json false)]
+      (is (every? #(m/validate schema %) xs))
+      (doseq [k optionals]
+        (is (not-any? #(contains? % (keyword k)) xs) (str k " is never there")))))
+
+  (testing "and `:random`, the default, is neither"
+    (let [xs (g/sample reg fqn 100 :seed 4 :json false)]
+      (is (< 0 (count (filter #(contains? % :tree) xs)) 100))))
+
+  (testing "a self-referential property that is optional still terminates when always drawn"
+    (let [xs (g/sample reg "g@1.0.0.Tree" 20 :seed 3 :optional :always :json false)]
+      (is (= 20 (count xs)))
+      (is (every? #(m/validate (cm/->schema reg "g@1.0.0.Tree") %) xs)))))

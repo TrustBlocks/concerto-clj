@@ -18,9 +18,9 @@
             [com.trustblocks.concerto.malli :as cm]
             [malli.generator :as mg]))
 
-(defn- schema [reg fqn {:keys [concerto-version closed]}]
+(defn- schema [reg fqn {:keys [concerto-version closed optional]}]
   (cm/->schema reg fqn
-               :generators true
+               :generators (if optional {:optional optional} true)
                :concerto-version (or concerto-version 4)
                :closed (if (nil? closed) true closed)))
 
@@ -46,8 +46,9 @@
   "One valid instance of `fqn`, as Concerto JSON (string keys) unless `:json false`.
 
   `:seed` makes it repeatable; `:size` (default 10) is how large a value may be --
-  how long a string, how many array elements. `:concerto-version` and `:closed`
-  are those of `malli/->schema`."
+  how long a string, how many array elements. `:optional` is `:always`, `:never` or
+  (the default) `:random`: whether optional properties are drawn present or left out.
+  `:concerto-version` and `:closed` are those of `malli/->schema`."
   [reg fqn & {:keys [seed size json] :or {size 10 json true} :as opts}]
   (let [edn (drop-nils (mg/generate (schema reg fqn opts) (generator-opts (cond-> {:size size} seed (assoc :seed seed)))))]
     (if json (inst/edn->json edn) edn)))
