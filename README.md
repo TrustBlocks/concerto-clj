@@ -107,8 +107,8 @@ A model with nothing nested emits as a plain map, as above.
 Maps are closed, matching Concerto, which rejects undeclared properties. The last
 entry of each map is what closes it: Malli's default entry, which is the schema for
 every key the map does not name, and here allows only `null`. Concerto ignores an
-undeclared property whose value is `null` (in 4.2.0, 5.0.0, 5.1.0 and 5.2.1, at any
-depth) and rejects any other, so `{:closed true}`, which refuses a key whatever its
+undeclared property whose value is `null` (in every release checked, 3.16.7 to 5.2.1,
+at any depth) and rejects any other, so `{:closed true}`, which refuses a key whatever its
 value, would turn away an instance Concerto accepts. Pass `:closed false` if the
 values being validated legitimately carry extra keys, though a storage adapter
 should strip its own derived keys instead — that way the guarantee this library
@@ -117,35 +117,50 @@ offers is the one Concerto offers.
 ### Which Concerto
 
 The validator this library agrees with is not one fixed thing, and the break is
-not where the major version is: **5.0 and 5.1 behave like 4.x; the strictness
-arrived in 5.2.0.** Choose with `:concerto-version`: a major version (`3`, `4`,
-`5`, where an integer means that major's first release, so `5` is 5.0) or a
-string that names the minor. The default is `4`.
+not where the major version is: **everything from 3.16.7 to 5.1.x behaves alike,
+and the strictness arrived in 5.2.0.** Choose with `:concerto-version`: a major
+version (`3`, `4`, `5`, where an integer means that major's first release, so `5`
+is 5.0.0) or a string that names the minor and patch, `"5.2"`, `"4.1.3"`. The
+default is `4`.
 
 ```clojure
-(cm/->schema reg fqn)                           ; 3.x / 4.x, the default
-(cm/->schema reg fqn :concerto-version 5)       ; 5.0 and 5.1 -- the same as 4
+(cm/->schema reg fqn)                           ; 4.0.0, the default
+(cm/->schema reg fqn :concerto-version 5)       ; 5.0.0 -- the same, but for --> maps
 (cm/->schema reg fqn :concerto-version "5.2")   ; 5.2.0 and later
 ```
 
-| | 3.x | 4.x, 5.0, 5.1 | 5.2 and later |
-|---|---|---|---|
-| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | same | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
-| scalar's constraints on a map key | not checked | not checked | checked |
-| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | same | checked |
-| DateTime map key | loose | loose | loose, unchanged |
-| `--> Asset` map value | model refused | the embedded resource, `$class` and all; a `resource:` string is rejected | the referenced identifier, a string; an embedded resource is rejected |
+| | 3.16.7 to 5.1.x | 5.2.0 and later |
+|---|---|---|
+| DateTime value | loose: `2019`, `2019-01-20`, `20190120`, no offset, `2019-13-45` all pass | `YYYY-MM-DDTHH:mm:ss[.f]` with `Z` or `±HH:MM`; the date must exist |
+| scalar's constraints on a map key | not checked | checked |
+| `Integer`/`Long`/`Double` map values | not checked by Concerto (checked here) | checked |
+| DateTime map key | loose | loose, unchanged |
+
+The one thing that varies *within* that range is a relationship as a map value
+(`map M { o K --> Asset }`), which has four regimes, each boundary found by running
+the releases either side of it:
+
+| | the value |
+|---|---|
+| before 3.23.0 | the model cannot be loaded; compiling it here is refused |
+| 3.23.0 to 4.1.2 | a `resource:` string or an embedded resource, either |
+| 4.1.3 to 5.1.x | the embedded resource, `$class` and all; a `resource:` string is rejected |
+| 5.2.0 and later | the referenced identifier, a string; an embedded resource is rejected |
+
+So `4`, being 4.0.0, takes either, and `"4.1.3"` and `5` take the embedded resource.
 
 Each cell was observed by running Concerto, not read from release notes: 3.16.7
-through `concerto validate`, and 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1 through
-concerto-core's `Serializer`. The boundary is exact: 5.1.0 matches 5.0.0, and
-5.2.0 matches 5.2.1. The test suite carries the DateTime tables for both
-behaviors. Metamodel JSON is identical across all of them, so the parser,
-fixtures and registry do not depend on the choice.
+through `concerto validate`, and the rest through concerto-core's `Serializer`:
+3.20.0, 3.21.0, 3.22.0, 3.23.0, 3.24.0, 3.25.0, 3.26.0, every 4.x release (4.0.0 to
+4.0.3, 4.1.0, 4.1.2 to 4.1.5, 4.2.0), 5.0.0, 5.1.0, 5.2.0 and 5.2.1: 22 in all. The DateTime and map-typing rows were run on 3.16.7, 3.20.0, 3.26.0,
+4.0.0, 4.1.0, 4.1.5, 4.2.0, 5.0.0, 5.1.0, 5.2.0 and 5.2.1. The boundaries are exact:
+5.1.0 matches 5.0.0 and 5.2.0 matches 5.2.1. The test suite carries the DateTime
+tables for both behaviors. Metamodel JSON is identical across all of them, so the
+parser, fixtures and registry do not depend on the choice.
 
 (Concerto's maintainers are also building a Rust engine for a future 6.0 that
 deliberately returns to the 5.0 behavior for `--> Asset` map values, so that
-cell may move again.)
+row may move again.)
 
 ### Sample instances and JSON Schema
 
