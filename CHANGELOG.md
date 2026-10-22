@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An identifier may not be empty. Concerto reads `""` as no identifier ("Missing
+  identifier for Type ..."): for an `identified by` field, even when `$identifier`
+  is also given, and for a system `$identifier` that is present. Both were
+  accepted. The same on 4.2.0, 5.0.0, 5.1.0 and 5.2.1.
+- A relationship may not be empty ("Missing id"), as a property, an array element
+  or a map value. The same on 4.2.0, 5.0.0, 5.1.0 and 5.2.1. Whether a `resource:`
+  URI names a type the property may hold is still not checked.
 - A nested concrete concept with a `null` or empty `$class` is read as the
   declared type, as Concerto does. It was rejected.
 - `:concerto-version 5` was the strict mode, and it should not have been: 5.0 and

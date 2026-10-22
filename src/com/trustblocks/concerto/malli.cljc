@@ -340,6 +340,11 @@
           {}
           (sort (keys reg))))
 
+(def ^:private reference
+  "The value of a relationship: the identifier it refers to, which Concerto
+  refuses to leave empty."
+  [:string {:min 1}])
+
 (declare object-schema)
 
 (def ^:private ^:dynamic *version*
@@ -435,7 +440,7 @@
       (case (relationship-maps)
         ;; As a RelationshipProperty: the referenced identifier, a bare id or a
         ;; `resource:` URI -- both strings.
-        :reference :string
+        :reference reference
         ;; An embedded resource, as 4.x, 5.0 and 5.1 read it.
         :embedded  (object-schema reg subtypes (mm/type-fqn type) key-fn)
         (throw (ex-info (str "Map " (pr-str fqn) " has a relationship value, which "
@@ -517,8 +522,10 @@
                  (case kind
                    "ObjectProperty"
                    (object-schema reg subtypes (mm/type-fqn (:type prop)) key-fn)
-                   ;; relationships store the referenced identifier
-                   "RelationshipProperty" :string
+                   ;; relationships store the referenced identifier: a bare id or a
+                   ;; `resource:` URI, and never empty ("Missing id"). Whether the
+                   ;; URI names a type the property may hold is not checked.
+                   "RelationshipProperty" reference
                    nil))]
     ;; No permissive default. An unrecognised property kind used to compile to
     ;; :any, which accepts anything -- so a model this library does not fully
@@ -561,6 +568,22 @@
                   {:idx {} :order []}
                   entries)))
 
+(defn- system-identified?
+  "Whether the declaration, or a supertype, is declared `identified` -- by the
+  system `$identifier`, as opposed to `identified by` a field of its own."
+  [reg fqn]
+  (boolean
+   (some #(= "Identified" (mm/metamodel-type (:$class (get-in reg [% :declaration :identified]))))
+         (mm/super-chain reg fqn))))
+
+(defn- non-empty
+  "An identifier may not be empty: Concerto reads \"\" as no identifier at all
+  (\"Missing identifier for Type ...\"), even when `$identifier` is also given."
+  [schema]
+  (if (= :string schema)
+    [:string {:min 1}]
+    [:and schema [:string {:min 1}]]))
+
 (defn- system-properties
   "Concerto's `$` properties, admitted where Concerto admits them.
 
@@ -587,7 +610,10 @@
                ;; Concerto treats a null or empty $class as absent, so the
                ;; declared type is read in its place.
                [(key-fn "$class") {:optional true} [:maybe [:enum fqn ""]]])
-             [(key-fn "$identifier") {:optional true} :string]]
+             ;; Accepted on any declaration. On an `identified` one, a value that is
+             ;; there may not be empty; leaving it out is fine.
+             [(key-fn "$identifier") {:optional true}
+              (if (system-identified? reg fqn) [:string {:min 1}] :string)]]
 
       (#{"TransactionDeclaration" "EventDeclaration"} kind)
       (conj [(key-fn "$timestamp") {:optional true} :concerto/date-time]))))
@@ -597,7 +623,8 @@
   into it, parents first."
   [reg subtypes fqn key-fn closed root?]
   (check-compilable! reg fqn)
-  (let [entries (for [f    (reverse (mm/super-chain reg fqn))
+  (let [id-field (mm/identity-field reg fqn)
+        entries (for [f    (reverse (mm/super-chain reg fqn))
                       prop (:properties (declaration-of reg f))]
                   (let [k (key-fn (:name prop))]
                     ;; A default makes a field omittable: Concerto fills it in.
@@ -608,7 +635,8 @@
                       ;; itself: a null *inside* an array is still an error, and
                       ;; a required property's null is a missing field.
                       [k {:optional true} [:maybe (property->schema reg subtypes prop key-fn)]]
-                      [k (property->schema reg subtypes prop key-fn)])))]
+                      [k (cond-> (property->schema reg subtypes prop key-fn)
+                           (= id-field (:name prop)) non-empty)])))]
     (into (into [:map (cond-> {} closed (assoc :closed true))]
                 (system-properties reg fqn key-fn root?))
           (ordered entries))))
